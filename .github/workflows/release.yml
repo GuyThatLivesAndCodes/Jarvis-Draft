@@ -1,0 +1,157 @@
+name: Release on Tag
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build and Release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: jarvis
+            asset_name: jarvis-linux-x86_64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: jarvis
+            asset_name: jarvis-macos-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: jarvis
+            asset_name: jarvis-macos-aarch64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: jarvis.exe
+            asset_name: jarvis-windows-x86_64.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libssl-dev \
+            libsoup2.4-dev \
+            libwebkit2gtk-4.1-dev \
+            libjavascriptcoregtk-4.1-dev \
+            pkg-config
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install npm dependencies
+        run: npm install
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Create artifact directory
+        run: mkdir -p ./artifacts
+
+      - name: Prepare artifact (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} ./artifacts/${{ matrix.asset_name }}
+          chmod +x ./artifacts/${{ matrix.asset_name }}
+
+      - name: Prepare artifact (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} ./artifacts/${{ matrix.asset_name }}
+          chmod +x ./artifacts/${{ matrix.asset_name }}
+
+      - name: Prepare artifact (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Copy-Item -Path target\${{ matrix.target }}\release\${{ matrix.artifact_name }} -Destination ./artifacts/${{ matrix.asset_name }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: ./artifacts/${{ matrix.asset_name }}
+
+  create-release:
+    name: Create Release
+    needs: build-and-release
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./release-artifacts
+
+      - name: Flatten artifacts
+        run: |
+          mkdir -p ./final-artifacts
+          find ./release-artifacts -type f -exec cp {} ./final-artifacts/ \;
+          ls -la ./final-artifacts/
+
+      - name: Get version from tag
+        id: tag_version
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Create Release Notes
+        id: changelog
+        run: |
+          echo "release_notes=Release ${{ steps.tag_version.outputs.version }}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ./final-artifacts/**
+          draft: false
+          prerelease: false
+          tag_name: ${{ steps.tag_version.outputs.version }}
+          body: |
+            # Jarvis ${{ steps.tag_version.outputs.version }}
+
+            ## Downloads
+
+            - **Linux (x86_64)**: jarvis-linux-x86_64
+            - **macOS (Intel)**: jarvis-macos-x86_64
+            - **macOS (Apple Silicon)**: jarvis-macos-aarch64
+            - **Windows (x86_64)**: jarvis-windows-x86_64.exe
+
+            ## Installation
+
+            1. Download the appropriate binary for your OS
+            2. Make it executable: `chmod +x jarvis-*` (Linux/macOS)
+            3. Run: `./jarvis` (Linux/macOS) or `jarvis-windows-x86_64.exe` (Windows)
+
+            ## Setup
+
+            - See [README.md](https://github.com/GuyThatLivesAndCodes/Jarvis-Draft/blob/main/README.md) for configuration instructions
+            - Add your API keys in the settings panel
+            - Configure local LLMs (Ollama/LM Studio) if desired
+
+            ## Changes
+
+            For changes in this release, see the commits since the last tag.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

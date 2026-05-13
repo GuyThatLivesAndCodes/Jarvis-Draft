@@ -1,5 +1,8 @@
 # Jarvis - Fullscreen AI Desktop Application
 
+[![Build Status](https://github.com/GuyThatLivesAndCodes/Jarvis-Draft/workflows/Build%20Jarvis/badge.svg)](https://github.com/GuyThatLivesAndCodes/Jarvis-Draft/actions)
+[![Release Status](https://github.com/GuyThatLivesAndCodes/Jarvis-Draft/workflows/Release%20on%20Tag/badge.svg)](https://github.com/GuyThatLivesAndCodes/Jarvis-Draft/releases)
+
 A beautiful, fullscreen Rust application providing access to multiple AI providers with intelligent local LLM detection.
 
 ## Features
@@ -166,6 +169,60 @@ When detected, users are notified and can opt to use them instead of cloud APIs.
 
 ### LM Studio
 - Any model loaded in the app
+
+## Automated Builds with GitHub Actions
+
+This repository includes automatic build pipelines that compile Jarvis for all platforms on every push and create releases on version tags.
+
+### GitHub Actions Workflows
+
+#### 1. Build Workflow (`build.yml`)
+- **Triggers**: Every push to `main` or `claude/**` branches, and pull requests
+- **Builds**: Linux, macOS (Intel & ARM64), and Windows
+- **Tests**: Runs full test suite and clippy linting
+- **Artifacts**: Uploads binaries as artifacts for each platform
+
+#### 2. Release Workflow (`release.yml`)
+- **Triggers**: When you push a git tag starting with `v` (e.g., `v0.2.0`)
+- **Creates**: GitHub Release with pre-built binaries for all platforms
+- **Downloads**: Users can directly download the binary for their OS
+
+#### 3. Dependency Updates (`dependabot.yml`)
+- **Frequency**: Weekly checks for outdated dependencies
+- **Coverage**: Rust crates, npm packages, and GitHub Actions
+- **Creates**: Automatic pull requests for updates
+
+### Creating a Release
+
+To create a new release with automatic builds:
+
+```bash
+# Tag the current commit with version
+git tag v0.2.0
+
+# Push the tag (this triggers the release workflow)
+git push origin v0.2.0
+```
+
+GitHub Actions will:
+1. ✅ Build for Linux, macOS (Intel & ARM), Windows
+2. ✅ Create a GitHub Release
+3. ✅ Upload binaries as release assets
+4. ✅ Generate download links
+
+Users can then download binaries from the [Releases page](https://github.com/GuyThatLivesAndCodes/Jarvis-Draft/releases).
+
+### Build Status
+
+Current build status is shown in the README with a badge. All workflows must pass before merging to main.
+
+### Customizing Builds
+
+Edit `.github/workflows/build.yml` to:
+- Add new platforms/targets
+- Change build optimizations
+- Add code signing
+- Create installers
 
 ## Building for Release
 
