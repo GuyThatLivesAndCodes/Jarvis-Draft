@@ -10,6 +10,12 @@
     "version": "0.1.0"
   },
   "tauri": {
+    "bundle": {
+      "icon": [
+        "icons/icon.png",
+        "icons/icon.ico"
+      ]
+    },
     "allowlist": {
       "all": true,
       "shell": {
