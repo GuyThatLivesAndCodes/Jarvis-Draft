@@ -71,6 +71,9 @@ jobs:
       - name: Install npm dependencies
         run: npm install
 
+      - name: Create dist directory
+        run: mkdir -p dist && touch dist/.gitkeep
+
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
 
