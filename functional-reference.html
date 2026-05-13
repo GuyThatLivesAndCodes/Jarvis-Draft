@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jarvis</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #000;
+    width: 100vw; height: 100vh;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    overflow: hidden;
+    font-family: 'Orbitron', monospace;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse at 0% 0%, rgba(30,100,180,0.18) 0%, transparent 50%),
+      radial-gradient(ellipse at 100% 0%, rgba(30,100,180,0.18) 0%, transparent 50%),
+      radial-gradient(ellipse at 100% 100%, rgba(30,100,180,0.18) 0%, transparent 50%),
+      radial-gradient(ellipse at 0% 100%, rgba(30,100,180,0.18) 0%, transparent 50%);
+    pointer-events: none; z-index: 20;
+  }
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    box-shadow: inset 0 0 80px 10px rgba(40,120,200,0.12);
+    pointer-events: none; z-index: 20;
+  }
+
+  /* ── SPLASH ── */
+  #splash {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    position: absolute; inset: 0; z-index: 5;
+    transition: opacity 0.5s ease;
+  }
+  #splash.hiding { opacity: 0; pointer-events: none; }
+
+  .blob-wrapper {
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+    width: 260px; height: 260px;
+    cursor: pointer;
+  }
+
+  .blob {
+    position: absolute;
+    width: 220px; height: 220px;
+    border-radius: 60% 40% 55% 45% / 50% 55% 45% 50%;
+    background: radial-gradient(ellipse at 40% 35%,
+      rgba(90,160,220,0.55) 0%,
+      rgba(50,120,185,0.45) 40%,
+      rgba(20,70,130,0.3) 70%,
+      transparent 100%
+    );
+    box-shadow:
+      0 0 60px 20px rgba(60,140,210,0.2),
+      0 0 120px 40px rgba(30,90,160,0.1),
+      inset 0 0 30px rgba(150,200,255,0.1);
+    animation: blobMorph 8s ease-in-out infinite;
+    filter: blur(1px);
+    transition: transform 0.15s ease;
+  }
+  .blob-wrapper:hover .blob { transform: scale(1.04); }
+  .blob-wrapper:active .blob { transform: scale(0.97); }
+
+  .blob-text {
+    position: relative; z-index: 2;
+    font-size: 2.4rem; font-weight: 700;
+    letter-spacing: 0.18em;
+    color: rgba(200,230,255,0.92);
+    text-shadow:
+      0 0 20px rgba(100,180,255,0.8),
+      0 0 40px rgba(60,140,220,0.5),
+      0 0 80px rgba(40,100,180,0.3);
+    user-select: none; pointer-events: none;
+  }
+
+  @keyframes blobMorph {
+    0%   { border-radius: 60% 40% 55% 45% / 50% 55% 45% 50%; }
+    25%  { border-radius: 45% 55% 40% 60% / 55% 45% 60% 40%; }
+    50%  { border-radius: 55% 45% 60% 40% / 45% 60% 40% 55%; }
+    75%  { border-radius: 40% 60% 45% 55% / 60% 40% 55% 45%; }
+    100% { border-radius: 60% 40% 55% 45% / 50% 55% 45% 50%; }
+  }
+
+  .time {
+    margin-top: 36px;
+    font-size: 1.1rem; font-weight: 400;
+    letter-spacing: 0.25em;
+    color: rgba(130,180,230,0.55);
+    z-index: 2;
+    text-shadow: 0 0 12px rgba(80,150,220,0.3);
+  }
+
+  /* ── CANVASES ── */
+  #particleCanvas {
+    position: fixed; inset: 0;
+    pointer-events: none; z-index: 1;
+    transition: opacity 0.5s ease;
+  }
+  #particleCanvas.hidden { opacity: 0; }
+
+  #gridCanvas {
+    position: fixed; inset: 0; z-index: 3;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.6s ease 0.25s;
+  }
+  #gridCanvas.visible { opacity: 1; }
+
+  /* ── CANVAS PAGE ── */
+  #canvas-page {
+    position: absolute; inset: 0; z-index: 4;
+    display: none; align-items: center; justify-content: center;
+    opacity: 0;
+    transition: opacity 0.4s ease 0.35s;
+  }
+  #canvas-page.visible { opacity: 1; }
+
+  /* Circle: enters zoomed in (large scale), animates down to 1 */
+  .jarvis-circle {
+    width: 90px; height: 90px;
+    border-radius: 50%;
+    background: radial-gradient(ellipse at 40% 35%,
+      rgba(90,160,220,0.6) 0%,
+      rgba(50,120,185,0.5) 50%,
+      rgba(20,70,130,0.35) 100%
+    );
+    box-shadow:
+      0 0 30px 8px rgba(60,140,210,0.25),
+      0 0 60px 16px rgba(30,90,160,0.12);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transform: scale(7);
+    opacity: 0;
+    transition:
+      transform 0.75s cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 0.5s ease;
+  }
+  .jarvis-circle.entered {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  .jarvis-circle-text {
+    font-size: 0.62rem; font-weight: 700;
+    letter-spacing: 0.2em;
+    color: rgba(200,230,255,0.9);
+    text-shadow: 0 0 10px rgba(100,180,255,0.7);
+    user-select: none;
+  }
+
+  /* ── DASHBOARD ── */
+  #dashboard {
+    position: absolute;
+    bottom: 22px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 8px;
+    background: linear-gradient(135deg, rgba(10,25,45,0.92) 0%, rgba(18,35,60,0.88) 100%);
+    border: 1px solid rgba(50,100,160,0.3);
+    border-radius: 10px;
+    padding: 8px 10px;
+    box-shadow: 0 0 24px rgba(30,80,150,0.15), inset 0 1px 0 rgba(80,140,220,0.08);
+    backdrop-filter: blur(6px);
+    opacity: 0;
+    transition: opacity 0.5s ease 0.8s;
+    z-index: 6;
+    width: min(560px, 90vw);
+  }
+  #dashboard.visible { opacity: 1; }
+
+  .dash-btn {
+    flex-shrink: 0;
+    width: 36px; height: 36px;
+    border-radius: 6px;
+    background: rgba(30,65,110,0.5);
+    border: 1px solid rgba(60,120,190,0.25);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .dash-btn:hover {
+    background: rgba(45,90,150,0.6);
+    border-color: rgba(80,150,220,0.4);
+  }
+
+  .dash-btn-group {
+    display: flex; gap: 6px;
+  }
+
+  #askInput {
+    flex: 1;
+    height: 36px;
+    background: rgba(8,20,40,0.7);
+    border: 1px solid rgba(50,100,160,0.3);
+    border-radius: 6px;
+    color: rgba(180,220,255,0.85);
+    font-family: 'Orbitron', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+    padding: 0 12px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  #askInput::placeholder { color: rgba(100,160,220,0.4); }
+  #askInput:focus {
+    border-color: rgba(80,150,220,0.55);
+    box-shadow: 0 0 12px rgba(60,130,210,0.15);
+  }
+</style>
+</head>
+<body>
+
+<canvas id="particleCanvas"></canvas>
+<canvas id="gridCanvas"></canvas>
+
+<div id="splash">
+  <div class="blob-wrapper" id="blobBtn">
+    <div class="blob"></div>
+    <span class="blob-text">JARVIS</span>
+  </div>
+  <div class="time" id="clock">00:00</div>
+</div>
+
+<div id="canvas-page">
+  <div class="jarvis-circle" id="jarvisCircle">
+    <span class="jarvis-circle-text">JARVIS</span>
+  </div>
+</div>
+
+<div id="dashboard">
+  <div class="dash-btn-group">
+    <div class="dash-btn"></div>
+    <div class="dash-btn"></div>
+  </div>
+  <input id="askInput" type="text" placeholder="Ask Jarvis..." spellcheck="false" autocomplete="off" />
+  <div class="dash-btn-group">
+    <div class="dash-btn"></div>
+    <div class="dash-btn"></div>
+  </div>
+</div>
+
+<script>
+// Clock
+function tick() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+}
+tick(); setInterval(tick, 1000);
+
+// Particles
+const pCanvas = document.getElementById('particleCanvas');
+const pCtx = pCanvas.getContext('2d');
+let pActive = true;
+
+function resizeP() { pCanvas.width = window.innerWidth; pCanvas.height = window.innerHeight; }
+resizeP();
+window.addEventListener('resize', resizeP);
+
+const CX = () => pCanvas.width / 2, CY = () => pCanvas.height / 2;
+const particles = Array.from({length: 55}, mkP);
+
+function mkP() {
+  const a = Math.random() * Math.PI * 2, r = 90 + Math.random() * 90;
+  return {
+    x: CX() + Math.cos(a)*r, y: CY() + Math.sin(a)*r,
+    vx: (Math.random()-.5)*.12, vy: (Math.random()-.5)*.12,
+    size: .8 + Math.random()*1.8,
+    alpha: Math.random(), dir: Math.random()<.5?1:-1,
+    spd: .0015 + Math.random()*.003
+  };
+}
+
+(function drawP() {
+  pCtx.clearRect(0, 0, pCanvas.width, pCanvas.height);
+  if (pActive) for (const p of particles) {
+    p.alpha += p.dir * p.spd;
+    if (p.alpha >= 1) { p.alpha=1; p.dir=-1; }
+    if (p.alpha <= 0) {
+      const a=Math.random()*Math.PI*2, r=90+Math.random()*90;
+      p.x=CX()+Math.cos(a)*r; p.y=CY()+Math.sin(a)*r;
+      p.vx=(Math.random()-.5)*.12; p.vy=(Math.random()-.5)*.12;
+      p.alpha=0; p.dir=1;
+    }
+    p.x+=p.vx; p.y+=p.vy;
+    pCtx.beginPath();
+    pCtx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+    pCtx.fillStyle=`rgba(100,170,230,${p.alpha*.75})`;
+    pCtx.fill();
+  }
+  requestAnimationFrame(drawP);
+})();
+
+// Grid
+const gCanvas = document.getElementById('gridCanvas');
+const gCtx = gCanvas.getContext('2d');
+
+function drawGrid() {
+  gCanvas.width = window.innerWidth; gCanvas.height = window.innerHeight;
+  const W=gCanvas.width, H=gCanvas.height, step=44;
+  gCtx.strokeStyle='rgba(35,75,115,0.38)'; gCtx.lineWidth=0.5;
+  for (let x=0; x<=W; x+=step) { gCtx.beginPath(); gCtx.moveTo(x,0); gCtx.lineTo(x,H); gCtx.stroke(); }
+  for (let y=0; y<=H; y+=step) { gCtx.beginPath(); gCtx.moveTo(0,y); gCtx.lineTo(W,y); gCtx.stroke(); }
+}
+drawGrid();
+window.addEventListener('resize', drawGrid);
+
+// Activation — also exposed as window.jarvisActivate for future voice hook
+function activate() {
+  const splash = document.getElementById('splash');
+  const page   = document.getElementById('canvas-page');
+  const grid   = document.getElementById('gridCanvas');
+  const circle = document.getElementById('jarvisCircle');
+
+  splash.classList.add('hiding');
+  pCanvas.classList.add('hidden');
+  pActive = false;
+
+  setTimeout(() => grid.classList.add('visible'), 150);
+
+  setTimeout(() => {
+    page.style.display = 'flex';
+    requestAnimationFrame(() => {
+      page.classList.add('visible');
+      setTimeout(() => circle.classList.add('entered'), 40);
+    });
+  }, 350);
+
+  setTimeout(() => document.getElementById('dashboard').classList.add('visible'), 500);
+}
+
+window.jarvisActivate = activate;
+document.getElementById('blobBtn').addEventListener('click', activate);
+</script>
+</body>
+</html>
