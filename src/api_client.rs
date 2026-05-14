@@ -99,7 +99,10 @@ async fn xai(msgs: Vec<ChatMessage>, key: Option<String>) -> Result<AIResponse, 
         .json().await.map_err(|e| e.to_string())?;
 
     if let Some(err) = resp.get("error") {
-        return Err(format!("xAI Error: {}", err.get("message").unwrap_or(&serde_json::json!("Unknown error"))));
+        let err_msg = err.get("message")
+            .and_then(|m| m.as_str())
+            .unwrap_or_else(|| err.as_str().unwrap_or("Check API key and rate limits"));
+        return Err(format!("xAI Error: {}", err_msg));
     }
 
     let content = resp["choices"]
