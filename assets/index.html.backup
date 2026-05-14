@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Jarvis - Native AI Assistant</title>
+<title>Jarvis</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
 <style>
@@ -162,92 +162,52 @@
     user-select: none;
   }
 
-  /* ── CHAT PANEL (DRAGGABLE) ── */
+  /* ── CHAT PANEL ── */
   #chatPanel {
-    position: fixed;
-    width: min(700px, 85vw);
-    max-height: 50vh;
+    position: absolute;
+    bottom: 80px; left: 50%; transform: translateX(-50%);
+    width: min(700px, 90vw);
+    max-height: calc(100vh - 160px);
     overflow-y: auto;
     display: none;
     flex-direction: column;
-    gap: 12px;
-    padding: 12px 16px;
-    background: linear-gradient(135deg, rgba(8,20,42,0.92) 0%, rgba(14,30,58,0.89) 100%);
-    border: 1px solid rgba(50,100,160,0.3);
+    gap: 14px;
+    padding: 16px 20px;
+    background: linear-gradient(135deg, rgba(8,20,42,0.88) 0%, rgba(14,30,58,0.85) 100%);
+    border: 1px solid rgba(50,100,160,0.28);
     border-radius: 10px;
     backdrop-filter: blur(8px);
-    z-index: 15;
+    z-index: 6;
     opacity: 0;
     transition: opacity 0.3s ease;
-    bottom: 80px; left: 50%; transform: translateX(-50%);
-    box-shadow: 0 0 30px rgba(30,80,180,0.2);
-    resize: both;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(50,100,160,0.3) transparent;
   }
+  #chatPanel::-webkit-scrollbar { width: 4px; }
+  #chatPanel::-webkit-scrollbar-track { background: transparent; }
+  #chatPanel::-webkit-scrollbar-thumb { background: rgba(50,100,160,0.3); border-radius: 2px; }
   #chatPanel.visible { opacity: 1; }
-  #chatPanel.minimized { max-height: 0; padding: 0; overflow: hidden; }
-
-  .chat-header {
-    display: flex; justify-content: space-between; align-items: center;
-    padding-bottom: 8px; border-bottom: 1px solid rgba(50,100,160,0.2);
-    cursor: move;
-    user-select: none;
-  }
-
-  .chat-title {
-    font-size: 0.52rem; letter-spacing: 0.2em;
-    color: rgba(120,180,240,0.8);
-  }
-
-  .chat-controls {
-    display: flex; gap: 6px;
-  }
-
-  .chat-btn {
-    width: 20px; height: 20px;
-    border-radius: 3px;
-    background: rgba(30,70,120,0.5);
-    border: 1px solid rgba(60,120,190,0.25);
-    cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 10px;
-    color: rgba(130,190,240,0.7);
-    transition: background 0.15s;
-  }
-  .chat-btn:hover { background: rgba(45,95,150,0.65); }
-
-  .chat-content {
-    display: flex; flex-direction: column; gap: 12px;
-    flex: 1;
-  }
 
   .chat-msg { display: flex; flex-direction: column; gap: 4px; }
   .chat-msg-role {
-    font-size: 0.46rem; letter-spacing: 0.2em;
+    font-size: 0.48rem; letter-spacing: 0.22em;
     font-family: 'Orbitron', monospace;
   }
   .chat-msg.user .chat-msg-role    { color: rgba(100,170,255,0.65); }
   .chat-msg.assistant .chat-msg-role { color: rgba(60,200,130,0.65); }
   .chat-msg-content {
-    font-size: 0.75rem; line-height: 1.6;
-    color: rgba(180,220,255,0.85);
+    font-size: 0.78rem; line-height: 1.65;
+    color: rgba(185,220,255,0.88);
     font-family: 'Courier New', monospace;
     white-space: pre-wrap; word-break: break-word;
   }
-
-  .tool-result {
-    margin-top: 6px; padding: 6px 8px;
-    background: rgba(40,100,160,0.2);
-    border-left: 2px solid rgba(60,150,220,0.5);
-    border-radius: 3px;
-    font-size: 0.7rem;
-    color: rgba(150,200,255,0.8);
-  }
+  .chat-msg.user .chat-msg-content { color: rgba(160,205,255,0.82); }
 
   .chat-loading {
     display: flex; gap: 6px; align-items: center; padding: 4px 0;
   }
   .chat-loading span {
-    width: 6px; height: 6px; border-radius: 50%;
+    width: 7px; height: 7px; border-radius: 50%;
     background: rgba(70,140,230,0.7);
     animation: loadPulse 1.1s ease-in-out infinite;
   }
@@ -260,14 +220,14 @@
 
   /* ── DASHBOARD ── */
   #dashboard {
-    position: fixed;
+    position: absolute;
     bottom: 22px; left: 50%; transform: translateX(-50%);
     display: flex; align-items: center; gap: 8px;
     background: linear-gradient(135deg, rgba(10,25,45,0.92) 0%, rgba(18,35,60,0.88) 100%);
     border: 1px solid rgba(50,100,160,0.3);
     border-radius: 10px;
     padding: 8px 10px;
-    box-shadow: 0 0 24px rgba(30,80,150,0.15);
+    box-shadow: 0 0 24px rgba(30,80,150,0.15), inset 0 1px 0 rgba(80,140,220,0.08);
     backdrop-filter: blur(6px);
     opacity: 0;
     transition: opacity 0.5s ease 0.8s;
@@ -307,6 +267,10 @@
   .status-dot.offline {
     background: rgba(200,60,60,0.8);
     box-shadow: 0 0 6px rgba(200,60,60,0.5);
+  }
+  .status-dot.unknown {
+    background: rgba(190,160,40,0.8);
+    box-shadow: 0 0 6px rgba(190,160,40,0.5);
   }
 
   #askInput {
@@ -524,71 +488,6 @@
     box-shadow: 0 0 22px rgba(45,125,215,0.22);
   }
 
-  /* ── LOCK SCREEN ── */
-  #lockScreen {
-    position: fixed; inset: 0; z-index: 200;
-    background: rgba(0,0,0,0.95);
-    backdrop-filter: blur(10px);
-    display: none;
-    align-items: center; justify-content: center;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-  }
-  #lockScreen.active { opacity: 1; }
-
-  .lock-box {
-    display: flex; flex-direction: column; align-items: center; gap: 24px;
-    padding: 40px;
-    text-align: center;
-  }
-
-  .lock-icon {
-    font-size: 48px;
-    color: rgba(80,160,240,0.9);
-    animation: lockPulse 2s ease-in-out infinite;
-  }
-
-  @keyframes lockPulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.1); }
-  }
-
-  .lock-text {
-    font-size: 0.8rem; letter-spacing: 0.2em;
-    color: rgba(150,200,255,0.85);
-    font-family: 'Orbitron', monospace;
-  }
-
-  .lock-input {
-    width: 200px; height: 40px;
-    background: rgba(10,25,45,0.8);
-    border: 1px solid rgba(80,140,210,0.5);
-    border-radius: 8px;
-    color: rgba(180,220,255,0.9);
-    font-family: monospace;
-    font-size: 1rem;
-    padding: 0 12px;
-    text-align: center;
-    letter-spacing: 0.3em;
-    outline: none;
-  }
-
-  .lock-btn {
-    width: 120px; height: 40px;
-    border-radius: 8px;
-    background: rgba(30,100,180,0.4);
-    border: 1px solid rgba(60,140,220,0.5);
-    color: rgba(150,210,255,0.9);
-    font-family: 'Orbitron', monospace;
-    font-size: 0.6rem;
-    letter-spacing: 0.15em;
-    cursor: pointer;
-    transition: background 0.2s;
-  }
-  .lock-btn:hover {
-    background: rgba(40,120,200,0.55);
-  }
-
   /* ── TOAST ── */
   #toast {
     position: fixed; bottom: 78px; right: 22px;
@@ -606,22 +505,6 @@
     box-shadow: 0 0 24px rgba(35,100,210,0.14);
   }
   #toast.visible { opacity: 1; transform: translateY(0); }
-
-  /* ── LOCK BUTTON ── */
-  .lock-dashboard-btn {
-    width: 36px; height: 36px;
-    border-radius: 6px;
-    background: rgba(180,60,60,0.35);
-    border: 1px solid rgba(200,80,80,0.4);
-    cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    color: rgba(220,120,120,0.8);
-    font-size: 16px;
-    transition: background 0.15s;
-  }
-  .lock-dashboard-btn:hover {
-    background: rgba(200,80,80,0.5);
-  }
 </style>
 </head>
 <body>
@@ -645,18 +528,8 @@
   </div>
 </div>
 
-<!-- CHAT PANEL (DRAGGABLE) -->
-<div id="chatPanel">
-  <div class="chat-header">
-    <span class="chat-title">CONVERSATION</span>
-    <div class="chat-controls">
-      <div class="chat-btn" id="chatMinBtn" title="Minimize">−</div>
-      <div class="chat-btn" id="chatClearBtn" title="Clear">🗑</div>
-      <div class="chat-btn" id="chatCloseBtn" title="Close">✕</div>
-    </div>
-  </div>
-  <div class="chat-content" id="chatContent"></div>
-</div>
+<!-- CHAT PANEL -->
+<div id="chatPanel"></div>
 
 <!-- DASHBOARD -->
 <div id="dashboard">
@@ -674,7 +547,6 @@
       <span id="providerLabel">AUTO</span><span style="opacity:0.6">▾</span>
     </div>
     <div class="send-btn" id="sendBtn" title="Send">▶</div>
-    <div class="lock-dashboard-btn" id="lockBtn" title="Lock">🔓</div>
     <div id="providerDropdown">
       <div class="provider-option active" data-provider="auto" data-label="AUTO">
         <div class="avail-dot ok" id="avail-auto"></div>AUTO
@@ -739,29 +611,7 @@
       <div class="llm-status-text" id="llmStatusDisplay">Checking...</div>
     </div>
 
-    <div class="settings-section">
-      <div class="settings-section-label">SECURITY</div>
-      <div class="settings-toggle-row">
-        <span class="settings-toggle-label">ENABLE LOCK FEATURE</span>
-        <div class="toggle" id="toggleLock"></div>
-      </div>
-      <div class="settings-row" id="lockPasswordRow" style="display:none;">
-        <span class="settings-key-label">PASSWORD</span>
-        <input class="settings-input" id="lockPassword" type="password" placeholder="Set a lock password..." />
-      </div>
-    </div>
-
     <button class="settings-save" id="settingsSave">SAVE SETTINGS</button>
-  </div>
-</div>
-
-<!-- LOCK SCREEN -->
-<div id="lockScreen">
-  <div class="lock-box">
-    <div class="lock-icon">🔒</div>
-    <div class="lock-text">JARVIS IS LOCKED</div>
-    <input class="lock-input" id="lockPassword Input" type="password" placeholder="Password" />
-    <button class="lock-btn" id="unlockBtn">UNLOCK</button>
   </div>
 </div>
 
@@ -769,7 +619,9 @@
 <div id="toast"></div>
 
 <script>
-// Clock
+// ══════════════════════════════════════
+//  CLOCK
+// ══════════════════════════════════════
 function tick() {
   const now = new Date();
   document.getElementById('clock').textContent =
@@ -777,16 +629,18 @@ function tick() {
 }
 tick(); setInterval(tick, 1000);
 
-// Particles
+// ══════════════════════════════════════
+//  PARTICLES
+// ══════════════════════════════════════
 const pCanvas = document.getElementById('particleCanvas');
-const pCtx = pCanvas.getContext('2d');
-let pActive = true;
+const pCtx    = pCanvas.getContext('2d');
+let pActive   = true;
 
 function resizeP() { pCanvas.width = window.innerWidth; pCanvas.height = window.innerHeight; }
 resizeP();
 window.addEventListener('resize', resizeP);
 
-const CX = () => pCanvas.width / 2;
+const CX = () => pCanvas.width  / 2;
 const CY = () => pCanvas.height / 2;
 const particles = Array.from({length: 55}, mkP);
 
@@ -821,9 +675,11 @@ function mkP() {
   requestAnimationFrame(drawP);
 })();
 
-// Grid
+// ══════════════════════════════════════
+//  GRID
+// ══════════════════════════════════════
 const gCanvas = document.getElementById('gridCanvas');
-const gCtx = gCanvas.getContext('2d');
+const gCtx    = gCanvas.getContext('2d');
 
 function drawGrid() {
   gCanvas.width = window.innerWidth; gCanvas.height = window.innerHeight;
@@ -835,7 +691,9 @@ function drawGrid() {
 drawGrid();
 window.addEventListener('resize', drawGrid);
 
-// Activation
+// ══════════════════════════════════════
+//  ACTIVATION
+// ══════════════════════════════════════
 let activated = false;
 
 function activate() {
@@ -843,8 +701,8 @@ function activate() {
   activated = true;
 
   const splash = document.getElementById('splash');
-  const page = document.getElementById('canvas-page');
-  const grid = document.getElementById('gridCanvas');
+  const page   = document.getElementById('canvas-page');
+  const grid   = document.getElementById('gridCanvas');
   const circle = document.getElementById('jarvisCircle');
 
   splash.classList.add('hiding');
@@ -865,7 +723,9 @@ function activate() {
 window.jarvisActivate = activate;
 document.getElementById('blobBtn').addEventListener('click', activate);
 
-// Fullscreen and Keyboard
+// ══════════════════════════════════════
+//  FULLSCREEN
+// ══════════════════════════════════════
 document.addEventListener('keydown', e => {
   if (e.key === 'F11') {
     e.preventDefault();
@@ -875,12 +735,10 @@ document.addEventListener('keydown', e => {
       document.exitFullscreen().catch(() => {});
     }
   }
-  if (e.key === 'Escape') {
-    if (document.getElementById('settingsModal').classList.contains('visible')) closeSettings();
-    if (document.getElementById('lockScreen').classList.contains('active')) return;
-  }
+  if (e.key === 'Escape' && settingsOpen) closeSettings();
 });
 
+// Request fullscreen on first user interaction
 let fullscreenRequested = false;
 document.addEventListener('click', function tryFullscreen() {
   if (!fullscreenRequested) {
@@ -890,62 +748,19 @@ document.addEventListener('click', function tryFullscreen() {
   }
 }, { capture: true });
 
-// State
+// ══════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════
 let currentProvider = 'auto';
-let chatHistory = [];
-let settings = {};
-let llmStatus = { ollama_available: false, lm_studio_available: false, ollama_models: [], lm_studio_models: [] };
-let prevLlmStatus = null;
-let settingsOpen = false;
-let isLocked = false;
-let chatMinimized = false;
+let chatHistory     = [];
+let settings        = {};
+let llmStatus       = { ollama_available: false, lm_studio_available: false, ollama_models: [], lm_studio_models: [] };
+let prevLlmStatus   = null;
+let settingsOpen    = false;
 
-// Chat Panel Dragging
-let isDragging = false;
-let dragOffsetX = 0;
-let dragOffsetY = 0;
-
-document.querySelector('.chat-header').addEventListener('mousedown', e => {
-  isDragging = true;
-  const panel = document.getElementById('chatPanel');
-  const rect = panel.getBoundingClientRect();
-  dragOffsetX = e.clientX - rect.left;
-  dragOffsetY = e.clientY - rect.top;
-});
-
-document.addEventListener('mousemove', e => {
-  if (isDragging) {
-    const panel = document.getElementById('chatPanel');
-    panel.style.position = 'fixed';
-    panel.style.bottom = 'auto';
-    panel.style.left = (e.clientX - dragOffsetX) + 'px';
-    panel.style.top = (e.clientY - dragOffsetY) + 'px';
-    panel.style.transform = 'none';
-  }
-});
-
-document.addEventListener('mouseup', () => { isDragging = false; });
-
-// Chat Controls
-document.getElementById('chatMinBtn').addEventListener('click', () => {
-  const panel = document.getElementById('chatPanel');
-  chatMinimized = !chatMinimized;
-  chatMinimized ? panel.classList.add('minimized') : panel.classList.remove('minimized');
-});
-
-document.getElementById('chatClearBtn').addEventListener('click', () => {
-  chatHistory = [];
-  document.getElementById('chatContent').innerHTML = '';
-  document.getElementById('chatPanel').style.display = 'none';
-  showToast('Chat cleared');
-});
-
-document.getElementById('chatCloseBtn').addEventListener('click', () => {
-  document.getElementById('chatPanel').classList.remove('visible');
-  setTimeout(() => document.getElementById('chatPanel').style.display = 'none', 300);
-});
-
-// API Helpers
+// ══════════════════════════════════════
+//  API HELPERS
+// ══════════════════════════════════════
 async function apiGet(path) {
   const r = await fetch(path);
   if (!r.ok) throw new Error(await r.text());
@@ -962,7 +777,9 @@ async function apiPost(path, body) {
   return r.json();
 }
 
-// Settings
+// ══════════════════════════════════════
+//  SETTINGS LOAD / SAVE
+// ══════════════════════════════════════
 async function loadSettings() {
   try {
     settings = await apiGet('/api/settings');
@@ -977,12 +794,12 @@ function applySettingsToUI() {
     const find = p => settings.credentials.find(c => c.provider === p);
     const ant = find('anthropic'), oai = find('openai'), xai = find('xai');
     if (ant?.api_key) document.getElementById('keyAnthropic').value = ant.api_key;
-    if (oai?.api_key) document.getElementById('keyOpenAI').value = oai.api_key;
-    if (xai?.api_key) document.getElementById('keyXAI').value = xai.api_key;
+    if (oai?.api_key) document.getElementById('keyOpenAI').value    = oai.api_key;
+    if (xai?.api_key) document.getElementById('keyXAI').value       = xai.api_key;
   }
   const auto = document.getElementById('toggleAutoSwitch');
   const ntfy = document.getElementById('toggleNotify');
-  settings.auto_switch_to_local ? auto.classList.add('on') : auto.classList.remove('on');
+  settings.auto_switch_to_local      ? auto.classList.add('on') : auto.classList.remove('on');
   settings.notify_on_local_available ? ntfy.classList.add('on') : ntfy.classList.remove('on');
 }
 
@@ -997,7 +814,7 @@ async function loadLLMStatus() {
 }
 
 function updateStatusUI() {
-  const dot = document.getElementById('statusDot');
+  const dot     = document.getElementById('statusDot');
   const hasCloud = hasConfiguredCloud();
   const hasLocal = llmStatus.ollama_available || llmStatus.lm_studio_available;
 
@@ -1006,9 +823,9 @@ function updateStatusUI() {
   const setAvail = (id, ok) => {
     document.getElementById(id).className = 'avail-dot' + (ok ? ' ok' : '');
   };
-  setAvail('avail-ollama', llmStatus.ollama_available);
+  setAvail('avail-ollama',    llmStatus.ollama_available);
   setAvail('avail-lm_studio', llmStatus.lm_studio_available);
-  setAvail('avail-auto', hasCloud || hasLocal);
+  setAvail('avail-auto',      hasCloud || hasLocal);
 
   ['anthropic','openai','xai'].forEach(p => {
     const cred = settings.credentials?.find(c => c.provider === p);
@@ -1032,20 +849,22 @@ function hasConfiguredCloud() {
 function checkLLMNotification() {
   if (!prevLlmStatus) { prevLlmStatus = { ...llmStatus }; return; }
   const wasLocal = prevLlmStatus.ollama_available || prevLlmStatus.lm_studio_available;
-  const nowLocal = llmStatus.ollama_available || llmStatus.lm_studio_available;
+  const nowLocal = llmStatus.ollama_available    || llmStatus.lm_studio_available;
   if (!wasLocal && nowLocal && settings.notify_on_local_available) {
     const who = [llmStatus.ollama_available && 'Ollama', llmStatus.lm_studio_available && 'LM Studio']
       .filter(Boolean).join(' & ');
-    showToast(`Local LLM online: ${who}`);
+    showToast(`Local LLM online: ${who}\nConsider switching for privacy`);
   }
   prevLlmStatus = { ...llmStatus };
 }
 
-// Provider
+// ══════════════════════════════════════
+//  PROVIDER RESOLUTION
+// ══════════════════════════════════════
 function resolveProvider() {
   if (currentProvider !== 'auto') return currentProvider;
   if (settings.auto_switch_to_local) {
-    if (llmStatus.ollama_available) return 'ollama';
+    if (llmStatus.ollama_available)    return 'ollama';
     if (llmStatus.lm_studio_available) return 'lm_studio';
   }
   const cloud = settings.credentials?.find(c => c.enabled && c.api_key?.length > 0);
@@ -1053,7 +872,9 @@ function resolveProvider() {
   return 'anthropic';
 }
 
-// Chat
+// ══════════════════════════════════════
+//  CHAT
+// ══════════════════════════════════════
 function escHtml(t) {
   const d = document.createElement('div');
   d.appendChild(document.createTextNode(t));
@@ -1061,32 +882,27 @@ function escHtml(t) {
 }
 
 function renderChat() {
-  const content = document.getElementById('chatContent');
-  if (!chatHistory.length) {
-    document.getElementById('chatPanel').style.display = 'none';
-    return;
-  }
-  document.getElementById('chatPanel').style.display = 'flex';
-  document.getElementById('chatPanel').classList.remove('minimized');
-  chatMinimized = false;
-  requestAnimationFrame(() => document.getElementById('chatPanel').classList.add('visible'));
-
-  content.innerHTML = chatHistory.map(m => `
+  const panel = document.getElementById('chatPanel');
+  if (!chatHistory.length) { panel.style.display = 'none'; return; }
+  panel.style.display = 'flex';
+  requestAnimationFrame(() => panel.classList.add('visible'));
+  panel.innerHTML = chatHistory.map(m => `
     <div class="chat-msg ${m.role}">
       <span class="chat-msg-role">${m.role === 'user' ? 'YOU' : 'JARVIS'}</span>
       <div class="chat-msg-content">${escHtml(m.content)}</div>
     </div>`).join('');
-
-  content.scrollTop = content.scrollHeight;
+  panel.scrollTop = panel.scrollHeight;
 }
 
 function showLoading() {
-  const content = document.getElementById('chatContent');
+  const panel = document.getElementById('chatPanel');
+  panel.style.display = 'flex';
+  requestAnimationFrame(() => panel.classList.add('visible'));
   const el = document.createElement('div');
   el.className = 'chat-loading'; el.id = 'loadingDots';
   el.innerHTML = '<span></span><span></span><span></span>';
-  content.appendChild(el);
-  content.scrollTop = content.scrollHeight;
+  panel.appendChild(el);
+  panel.scrollTop = panel.scrollHeight;
 }
 
 function hideLoading() {
@@ -1094,7 +910,7 @@ function hideLoading() {
 }
 
 async function sendQuery(text) {
-  if (!text.trim() || isLocked) return;
+  if (!text.trim()) return;
   activate();
   chatHistory.push({ role: 'user', content: text });
   renderChat();
@@ -1121,7 +937,9 @@ async function sendQuery(text) {
   }
 }
 
-// Input
+// ══════════════════════════════════════
+//  INPUT / SEND
+// ══════════════════════════════════════
 const input = document.getElementById('askInput');
 
 input.addEventListener('keydown', e => {
@@ -1137,7 +955,9 @@ document.getElementById('sendBtn').addEventListener('click', () => {
   if (t) { input.value = ''; sendQuery(t); }
 });
 
-// Provider Dropdown
+// ══════════════════════════════════════
+//  PROVIDER DROPDOWN
+// ══════════════════════════════════════
 const dropdown = document.getElementById('providerDropdown');
 
 document.getElementById('providerBtn').addEventListener('click', e => {
@@ -1157,7 +977,9 @@ document.querySelectorAll('.provider-option').forEach(opt => {
 
 document.addEventListener('click', () => dropdown.classList.remove('open'));
 
-// Settings Modal
+// ══════════════════════════════════════
+//  SETTINGS MODAL
+// ══════════════════════════════════════
 function openSettings() {
   settingsOpen = true;
   const modal = document.getElementById('settingsModal');
@@ -1180,7 +1002,7 @@ document.getElementById('settingsModal').addEventListener('click', function(e) {
 
 document.getElementById('statusBtn').addEventListener('click', () => {
   const lines = [];
-  if (llmStatus.ollama_available) lines.push('Ollama: ONLINE' + (llmStatus.ollama_models?.length ? ` (${llmStatus.ollama_models[0]})` : ''));
+  if (llmStatus.ollama_available)    lines.push('Ollama: ONLINE' + (llmStatus.ollama_models?.length ? ` (${llmStatus.ollama_models[0]})` : ''));
   if (llmStatus.lm_studio_available) lines.push('LM Studio: ONLINE');
   if (!lines.length) lines.push('No local LLMs detected');
   showToast(lines.join('\n'));
@@ -1192,18 +1014,12 @@ document.getElementById('statusBtn').addEventListener('click', () => {
   });
 });
 
-document.getElementById('toggleLock').addEventListener('click', function() {
-  this.classList.toggle('on');
-  document.getElementById('lockPasswordRow').style.display =
-    this.classList.contains('on') ? 'flex' : 'none';
-});
-
 document.getElementById('settingsSave').addEventListener('click', async () => {
   const body = {
     anthropic_key: document.getElementById('keyAnthropic').value,
-    openai_key: document.getElementById('keyOpenAI').value,
-    xai_key: document.getElementById('keyXAI').value,
-    auto_switch_to_local: document.getElementById('toggleAutoSwitch').classList.contains('on'),
+    openai_key:    document.getElementById('keyOpenAI').value,
+    xai_key:       document.getElementById('keyXAI').value,
+    auto_switch_to_local:      document.getElementById('toggleAutoSwitch').classList.contains('on'),
     notify_on_local_available: document.getElementById('toggleNotify').classList.contains('on'),
   };
   try {
@@ -1221,58 +1037,9 @@ document.getElementById('settingsSave').addEventListener('click', async () => {
   }
 });
 
-// Lock Feature
-async function checkLockStatus() {
-  try {
-    const status = await apiGet('/api/lock');
-    if (status.locked && !isLocked) showLockScreen();
-  } catch(e) {}
-}
-
-function showLockScreen() {
-  isLocked = true;
-  document.getElementById('lockScreen').classList.add('active');
-  document.getElementById('lockScreen').style.display = 'flex';
-  document.getElementById('lockPasswordInput').focus();
-}
-
-function hideLockScreen() {
-  isLocked = false;
-  const lock = document.getElementById('lockScreen');
-  lock.classList.remove('active');
-  setTimeout(() => { lock.style.display = 'none'; }, 300);
-}
-
-document.getElementById('lockBtn').addEventListener('click', async () => {
-  if (isLocked) return;
-  try {
-    await apiPost('/api/lock', { password: document.getElementById('lockPassword').value || '' });
-    showLockScreen();
-    showToast('Jarvis locked');
-  } catch(e) {
-    showToast('Lock failed: ' + e.message);
-  }
-});
-
-document.getElementById('unlockBtn').addEventListener('click', async () => {
-  try {
-    const pwd = document.getElementById('lockPasswordInput').value;
-    await apiPost('/api/unlock', { password: pwd });
-    document.getElementById('lockPasswordInput').value = '';
-    hideLockScreen();
-    showToast('Unlocked');
-  } catch(e) {
-    showToast('Invalid password');
-  }
-});
-
-document.getElementById('lockPasswordInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter') document.getElementById('unlockBtn').click();
-});
-
-setInterval(checkLockStatus, 5000);
-
-// Toast
+// ══════════════════════════════════════
+//  TOAST
+// ══════════════════════════════════════
 let toastTimer = null;
 function showToast(msg) {
   const t = document.getElementById('toast');
@@ -1282,7 +1049,9 @@ function showToast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('visible'), 4200);
 }
 
-// Init
+// ══════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════
 async function init() {
   await loadSettings();
   await loadLLMStatus();

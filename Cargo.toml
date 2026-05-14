@@ -18,6 +18,10 @@ dirs = "5"
 log = "0.4"
 env_logger = "0.11"
 open = "5"
+wry = "0.40"
+tao = "0.27"
+base64 = "0.22"
+urlencoding = "2.1"
 
 [profile.release]
 opt-level = 3

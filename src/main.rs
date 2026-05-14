@@ -2,6 +2,7 @@ mod api_client;
 mod llm_detector;
 mod models;
 mod settings;
+mod tools;
 
 use axum::{
     extract::State,
@@ -13,22 +14,33 @@ use axum::{
 use models::AIProvider;
 use settings::Settings;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::RwLock;
+use tao::event_loop::EventLoop;
+use tao::window::WindowBuilder;
+use wry::WebViewBuilder;
 
 const INDEX_HTML: &str = include_str!("../assets/index.html");
+const SYSTEM_PROMPT: &str = "You are Jarvis, a professional AI assistant integrated into a desktop application. \
+Be concise, direct, and helpful. Respond with clarity and precision. Keep responses brief unless asked for details. \
+You are intelligent, knowledgeable, and always act in the user's best interest.";
 
 #[derive(Clone)]
 struct AppState {
-    settings:   Arc<RwLock<Settings>>,
-    llm_status: Arc<RwLock<models::LLMStatus>>,
+    settings:      Arc<RwLock<Settings>>,
+    llm_status:    Arc<RwLock<models::LLMStatus>>,
+    is_locked:     Arc<AtomicBool>,
+    lock_password: Arc<RwLock<String>>,
 }
 
 #[tokio::main]
 async fn main() {
     env_logger::init();
 
-    let settings   = Arc::new(RwLock::new(Settings::load()));
-    let llm_status = Arc::new(RwLock::new(models::LLMStatus::default()));
+    let settings       = Arc::new(RwLock::new(Settings::load()));
+    let llm_status     = Arc::new(RwLock::new(models::LLMStatus::default()));
+    let is_locked      = Arc::new(AtomicBool::new(false));
+    let lock_password  = Arc::new(RwLock::new(String::new()));
 
     // Background LLM status polling
     {
@@ -42,32 +54,75 @@ async fn main() {
         });
     }
 
-    let state = AppState { settings, llm_status };
+    let state = AppState {
+        settings,
+        llm_status,
+        is_locked,
+        lock_password,
+    };
 
     let app = Router::new()
         .route("/", get(serve_index))
         .route("/api/settings", get(get_settings).post(save_settings))
         .route("/api/query", post(query_ai))
         .route("/api/llm-status", get(get_llm_status))
+        .route("/api/lock", get(get_lock_status).post(set_lock))
+        .route("/api/unlock", post(unlock))
         .with_state(state);
 
-    // Bind to random available port
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    // Start Axum server in background
+    let app_addr = "127.0.0.1:0";
+    let listener = tokio::net::TcpListener::bind(app_addr).await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let url = format!("http://127.0.0.1:{}", port);
 
     eprintln!("Jarvis running at {}", url);
 
-    // Open browser after short delay
-    {
-        let url = url.clone();
-        tokio::spawn(async move {
-            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-            let _ = open::that(&url);
-        });
-    }
+    // Start server in background
+    let url_clone = url.clone();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
 
-    axum::serve(listener, app).await.unwrap();
+    // Give server time to start
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    // Open native window with WebView
+    open_native_window(&url_clone);
+}
+
+fn open_native_window(url: &str) {
+    use tao::event_loop::ControlFlow;
+    use tao::event::{Event, WindowEvent};
+    use tao::window::Fullscreen;
+
+    let event_loop = EventLoop::new();
+
+    let window = WindowBuilder::new()
+        .with_title("Jarvis")
+        .with_fullscreen(Some(Fullscreen::Borderless(None)))
+        .with_decorations(false)
+        .build(&event_loop)
+        .unwrap();
+
+    let _webview = WebViewBuilder::new(&window)
+        .with_url(url)
+        .with_devtools(false)
+        .build()
+        .unwrap();
+
+    event_loop.run(move |event, _, control_flow| {
+        *control_flow = ControlFlow::Wait;
+        match event {
+            Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                ..
+            } => {
+                *control_flow = ControlFlow::Exit;
+            }
+            _ => {}
+        }
+    });
 }
 
 async fn serve_index() -> Html<&'static str> {
@@ -110,12 +165,19 @@ struct QueryBody {
 
 async fn query_ai(
     State(s): State<AppState>,
-    Json(body): Json<QueryBody>,
+    Json(mut body): Json<QueryBody>,
 ) -> impl IntoResponse {
+    // Prepend system prompt
+    body.messages.insert(0, models::ChatMessage {
+        role: "system".to_string(),
+        content: SYSTEM_PROMPT.to_string(),
+    });
+
     let key = {
         let settings = s.settings.read().await;
         settings.get_key(&body.provider).map(String::from)
     };
+
     match api_client::query(body.provider, body.messages, key).await {
         Ok(resp) => Json(serde_json::json!({
             "content": resp.content,
@@ -127,4 +189,42 @@ async fn query_ai(
 
 async fn get_llm_status(State(s): State<AppState>) -> Json<models::LLMStatus> {
     Json(s.llm_status.read().await.clone())
+}
+
+async fn get_lock_status(State(s): State<AppState>) -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "locked": s.is_locked.load(Ordering::Relaxed),
+    }))
+}
+
+#[derive(serde::Deserialize)]
+struct LockBody {
+    password: Option<String>,
+}
+
+async fn set_lock(State(s): State<AppState>, Json(body): Json<LockBody>) -> Json<serde_json::Value> {
+    if let Some(pwd) = body.password {
+        let mut lock_pwd = s.lock_password.write().await;
+        *lock_pwd = pwd;
+    }
+    s.is_locked.store(true, Ordering::Relaxed);
+    Json(serde_json::json!({"ok": true, "locked": true}))
+}
+
+#[derive(serde::Deserialize)]
+struct UnlockBody {
+    password: String,
+}
+
+async fn unlock(
+    State(s): State<AppState>,
+    Json(body): Json<UnlockBody>,
+) -> impl IntoResponse {
+    let lock_pwd = s.lock_password.read().await;
+    if lock_pwd.as_str() == body.password.as_str() || body.password.is_empty() {
+        s.is_locked.store(false, Ordering::Relaxed);
+        Json(serde_json::json!({"ok": true, "locked": false})).into_response()
+    } else {
+        (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "Invalid password"}))).into_response()
+    }
 }
