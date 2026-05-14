@@ -55,7 +55,7 @@ pub struct ChatMessage {
     pub content: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AIResponse {
     pub content:  String,
     pub provider: AIProvider,

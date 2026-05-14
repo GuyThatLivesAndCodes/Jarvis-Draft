@@ -50,18 +50,11 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
 
-      # egui on Linux needs a few native graphics/display libraries
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            libxcb-render0-dev \
-            libxcb-shape0-dev \
-            libxcb-xfixes0-dev \
-            libxkbcommon-dev \
-            libssl-dev \
-            pkg-config
+          sudo apt-get install -y libssl-dev pkg-config
 
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
@@ -103,13 +96,7 @@ jobs:
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            libxcb-render0-dev \
-            libxcb-shape0-dev \
-            libxcb-xfixes0-dev \
-            libxkbcommon-dev \
-            libssl-dev \
-            pkg-config
+          sudo apt-get install -y libssl-dev pkg-config
 
       - name: Clippy
         run: cargo clippy -- -D warnings
