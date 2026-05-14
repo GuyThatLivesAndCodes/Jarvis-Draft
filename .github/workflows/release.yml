@@ -2,36 +2,38 @@ name: Release on Tag
 
 on:
   push:
-    tags:
-      - 'v*'
+    tags: [ 'v*' ]
 
 permissions:
   contents: write
 
 jobs:
-  build-and-release:
-    name: Build and Release
+  build:
+    name: Build — ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
+            target:        x86_64-unknown-linux-gnu
             artifact_name: jarvis
-            asset_name: jarvis-linux-x86_64
+            asset_name:    jarvis-linux-x86_64
+
           - os: macos-latest
-            target: x86_64-apple-darwin
+            target:        x86_64-apple-darwin
             artifact_name: jarvis
-            asset_name: jarvis-macos-x86_64
+            asset_name:    jarvis-macos-x86_64
+
           - os: macos-latest
-            target: aarch64-apple-darwin
+            target:        aarch64-apple-darwin
             artifact_name: jarvis
-            asset_name: jarvis-macos-aarch64
+            asset_name:    jarvis-macos-aarch64
+
           - os: windows-latest
-            target: x86_64-pc-windows-msvc
+            target:        x86_64-pc-windows-msvc
             artifact_name: jarvis.exe
-            asset_name: jarvis-windows-x86_64.exe
+            asset_name:    jarvis-windows-x86_64.exe
 
     steps:
       - uses: actions/checkout@v4
@@ -41,127 +43,82 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            build-essential \
-            libgtk-3-dev \
+            libxcb-render0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libxkbcommon-dev \
             libssl-dev \
-            libsoup2.4-dev \
-            libwebkit2gtk-4.1-dev \
-            libjavascriptcoregtk-4.1-dev \
-            libjavascriptcoregtk-6.0-dev \
-            libwebkitgtk-6.0-dev \
             pkg-config
-
-          # Create symlinks for javascriptcoregtk-4.0 (for compatibility)
-          sudo ln -sf /usr/lib/x86_64-linux-gnu/pkgconfig/javascriptcoregtk-4.1.pc /usr/lib/x86_64-linux-gnu/pkgconfig/javascriptcoregtk-4.0.pc 2>/dev/null || true
-          sudo ln -sf /usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.1.pc /usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.0.pc 2>/dev/null || true
-
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
-
-      - name: Install npm dependencies
-        run: npm install
-
-      - name: Create dist directory
-        run: mkdir -p dist && touch dist/.gitkeep
 
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Create artifact directory
-        run: mkdir -p ./artifacts
-
-      - name: Prepare artifact (Linux)
-        if: runner.os == 'Linux'
+      - name: Prepare artifact (Unix)
+        if: runner.os != 'Windows'
         run: |
-          cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} ./artifacts/${{ matrix.asset_name }}
-          chmod +x ./artifacts/${{ matrix.asset_name }}
-
-      - name: Prepare artifact (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} ./artifacts/${{ matrix.asset_name }}
-          chmod +x ./artifacts/${{ matrix.asset_name }}
+          mkdir -p artifacts
+          cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} artifacts/${{ matrix.asset_name }}
+          chmod +x artifacts/${{ matrix.asset_name }}
 
       - name: Prepare artifact (Windows)
         if: runner.os == 'Windows'
+        shell: pwsh
         run: |
-          Copy-Item -Path target\${{ matrix.target }}\release\${{ matrix.artifact_name }} -Destination ./artifacts/${{ matrix.asset_name }}
+          New-Item -ItemType Directory -Force -Path artifacts
+          Copy-Item target\${{ matrix.target }}\release\${{ matrix.artifact_name }} artifacts\${{ matrix.asset_name }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset_name }}
-          path: ./artifacts/${{ matrix.asset_name }}
+          path: artifacts/${{ matrix.asset_name }}
 
   create-release:
     name: Create Release
-    needs: build-and-release
+    needs: build
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          path: ./release-artifacts
+          path: release-artifacts
 
       - name: Flatten artifacts
         run: |
-          mkdir -p ./final-artifacts
-          find ./release-artifacts -type f -exec cp {} ./final-artifacts/ \;
-          ls -la ./final-artifacts/
-
-      - name: Get version from tag
-        id: tag_version
-        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
-      - name: Create Release Notes
-        id: changelog
-        run: |
-          echo "release_notes=Release ${{ steps.tag_version.outputs.version }}" >> $GITHUB_OUTPUT
+          mkdir -p final
+          find release-artifacts -type f -exec cp {} final/ \;
+          ls -lh final/
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: ./final-artifacts/**
-          draft: false
-          prerelease: false
-          tag_name: ${{ steps.tag_version.outputs.version }}
+          files: final/*
           body: |
-            # Jarvis ${{ steps.tag_version.outputs.version }}
+            ## Jarvis ${{ github.ref_name }}
 
-            ## Downloads
+            Pure-Rust fullscreen AI assistant — no web server, no runtime dependencies.
 
-            - **Linux (x86_64)**: jarvis-linux-x86_64
-            - **macOS (Intel)**: jarvis-macos-x86_64
-            - **macOS (Apple Silicon)**: jarvis-macos-aarch64
-            - **Windows (x86_64)**: jarvis-windows-x86_64.exe
+            | Platform | File |
+            |----------|------|
+            | Linux x86_64 | `jarvis-linux-x86_64` |
+            | macOS Intel  | `jarvis-macos-x86_64` |
+            | macOS Apple Silicon | `jarvis-macos-aarch64` |
+            | Windows x86_64 | `jarvis-windows-x86_64.exe` |
 
-            ## Installation
-
-            1. Download the appropriate binary for your OS
-            2. Make it executable: `chmod +x jarvis-*` (Linux/macOS)
-            3. Run: `./jarvis` (Linux/macOS) or `jarvis-windows-x86_64.exe` (Windows)
-
-            ## Setup
-
-            - See [README.md](https://github.com/GuyThatLivesAndCodes/Jarvis-Draft/blob/main/README.md) for configuration instructions
-            - Add your API keys in the settings panel
-            - Configure local LLMs (Ollama/LM Studio) if desired
-
-            ## Changes
-
-            For changes in this release, see the commits since the last tag.
+            ### Setup
+            1. Download binary, make executable (`chmod +x` on Linux/macOS)
+            2. Run — starts fullscreen immediately
+            3. Click ⚙ in the bottom bar → add API keys
+            4. **F11** toggles fullscreen
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

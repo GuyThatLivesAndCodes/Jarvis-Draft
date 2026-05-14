@@ -1,107 +1,50 @@
 use crate::models::LLMStatus;
-use chrono::Local;
 
-pub struct LLMDetector {
-    ollama_available: bool,
-    lm_studio_available: bool,
+pub async fn check_llm_status() -> LLMStatus {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(2))
+        .build()
+        .unwrap_or_default();
+
+    let (ollama_ok, ollama_models) = check_ollama(&client).await;
+    let (lm_ok,     lm_models)    = check_lm_studio(&client).await;
+
+    LLMStatus {
+        ollama_available:    ollama_ok,
+        lm_studio_available: lm_ok,
+        ollama_models,
+        lm_studio_models:    lm_models,
+    }
 }
 
-impl LLMDetector {
-    pub fn new() -> Self {
-        LLMDetector {
-            ollama_available: false,
-            lm_studio_available: false,
+async fn check_ollama(client: &reqwest::Client) -> (bool, Vec<String>) {
+    match client.get("http://localhost:11434/api/tags").send().await {
+        Ok(r) if r.status().is_success() => {
+            let models = r.json::<serde_json::Value>().await
+                .ok()
+                .and_then(|v| v.get("models")?.as_array().cloned())
+                .map(|arr| arr.iter()
+                    .filter_map(|m| m.get("name")?.as_str().map(String::from))
+                    .collect())
+                .unwrap_or_default();
+            (true, models)
         }
+        _ => (false, vec![]),
     }
+}
 
-    pub async fn check_available(&mut self) -> LLMStatus {
-        self.ollama_available = self.check_ollama().await;
-        self.lm_studio_available = self.check_lm_studio().await;
-
-        let ollama_models = if self.ollama_available {
-            self.get_ollama_models().await.unwrap_or_default()
-        } else {
-            vec![]
-        };
-
-        let lm_studio_models = if self.lm_studio_available {
-            self.get_lm_studio_models().await.unwrap_or_default()
-        } else {
-            vec![]
-        };
-
-        LLMStatus {
-            ollama_available: self.ollama_available,
-            lm_studio_available: self.lm_studio_available,
-            ollama_models,
-            lm_studio_models,
-            last_checked: Local::now().to_rfc3339(),
+async fn check_lm_studio(client: &reqwest::Client) -> (bool, Vec<String>) {
+    match client.get("http://localhost:1234/api/models").send().await {
+        Ok(r) if r.status().is_success() => {
+            let models = r.json::<serde_json::Value>().await
+                .ok()
+                .and_then(|v| v.get("data")?.as_array().cloned())
+                .map(|arr| arr.iter()
+                    .filter_map(|m| m.get("id")?.as_str().map(String::from))
+                    .collect())
+                .unwrap_or_default();
+            (true, models)
         }
-    }
-
-    async fn check_ollama(&self) -> bool {
-        match reqwest::Client::new()
-            .get("http://localhost:11434/api/tags")
-            .timeout(std::time::Duration::from_secs(2))
-            .send()
-            .await
-        {
-            Ok(response) => response.status().is_success(),
-            Err(_) => false,
-        }
-    }
-
-    async fn check_lm_studio(&self) -> bool {
-        match reqwest::Client::new()
-            .get("http://localhost:1234/api/models")
-            .timeout(std::time::Duration::from_secs(2))
-            .send()
-            .await
-        {
-            Ok(response) => response.status().is_success(),
-            Err(_) => false,
-        }
-    }
-
-    async fn get_ollama_models(&self) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-        let response = reqwest::Client::new()
-            .get("http://localhost:11434/api/tags")
-            .timeout(std::time::Duration::from_secs(5))
-            .send()
-            .await?;
-
-        let body: serde_json::Value = response.json().await?;
-        let models: Vec<String> = body
-            .get("models")
-            .and_then(|m| m.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|m| m.get("name").and_then(|n| n.as_str()).map(String::from))
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        Ok(models)
-    }
-
-    async fn get_lm_studio_models(&self) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-        let response = reqwest::Client::new()
-            .get("http://localhost:1234/api/models")
-            .timeout(std::time::Duration::from_secs(5))
-            .send()
-            .await?;
-
-        let body: serde_json::Value = response.json().await?;
-        let models: Vec<String> = body
-            .get("data")
-            .and_then(|d| d.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|m| m.get("id").and_then(|n| n.as_str()).map(String::from))
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        Ok(models)
+        _ => (false, vec![]),
     }
 }
