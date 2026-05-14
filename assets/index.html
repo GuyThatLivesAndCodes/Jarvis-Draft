@@ -6,6 +6,8 @@
 <title>Jarvis - Native AI Assistant</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -524,6 +526,75 @@
     box-shadow: 0 0 22px rgba(45,125,215,0.22);
   }
 
+  /* ── MAP PANEL ── */
+  #mapModal {
+    position: fixed; inset: 0; z-index: 15;
+    display: none;
+    align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.7);
+    opacity: 0;
+    transition: opacity 0.35s ease;
+  }
+  #mapModal.visible {
+    display: flex;
+    opacity: 1;
+  }
+
+  .map-container {
+    width: 85vw; height: 85vh;
+    max-width: 1200px; max-height: 800px;
+    border-radius: 12px;
+    background: #000;
+    border: 2px solid rgba(60,140,210,0.5);
+    box-shadow: 0 0 40px rgba(30,100,180,0.6), inset 0 0 30px rgba(20,70,130,0.2);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+
+  #mapContainer {
+    flex: 1;
+    position: relative;
+  }
+
+  .map-header {
+    padding: 16px 20px;
+    background: rgba(10,40,80,0.8);
+    border-bottom: 1px solid rgba(60,140,210,0.3);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .map-title {
+    font-family: 'Orbitron', monospace;
+    color: rgba(150,200,255,0.9);
+    font-size: 0.95rem;
+    letter-spacing: 0.1em;
+  }
+
+  .map-close {
+    width: 32px; height: 32px;
+    border-radius: 6px;
+    background: rgba(60,140,210,0.2);
+    border: 1px solid rgba(60,140,210,0.4);
+    color: rgba(150,200,255,0.8);
+    cursor: pointer;
+    display: flex;
+    align-items: center; justify-content: center;
+    font-size: 1.2rem;
+    transition: all 0.2s ease;
+  }
+  .map-close:hover {
+    background: rgba(60,140,210,0.4);
+    border-color: rgba(60,140,210,0.7);
+  }
+
+  .leaflet-container {
+    background: linear-gradient(135deg, rgba(10,30,60,0.95) 0%, rgba(15,45,80,0.95) 100%);
+  }
+  .leaflet-tile { filter: hue-rotate(200deg) saturate(0.8) brightness(0.9); }
+  .leaflet-control-attribution { background: rgba(10,30,60,0.6); color: rgba(100,180,255,0.7); }
+
 
   /* ── TOAST ── */
   #toast {
@@ -697,6 +768,17 @@
 
 
     <button class="settings-save" id="settingsSave">SAVE SETTINGS</button>
+  </div>
+</div>
+
+<!-- MAP MODAL -->
+<div id="mapModal">
+  <div class="map-container">
+    <div class="map-header">
+      <span class="map-title" id="mapTitle">LOCATION</span>
+      <div class="map-close" id="mapClose">✕</div>
+    </div>
+    <div id="mapContainer"></div>
   </div>
 </div>
 
@@ -1035,41 +1117,19 @@ function handleToolAction(action) {
   switch (action.name) {
     case 'move_jarvis': {
       const pos = (action.input?.position || 'center').toLowerCase();
-      const map = {
-        'center':        { ai: 'center',     jc: 'center' },
-        'top-left':      { ai: 'flex-start', jc: 'flex-start' },
-        'top-center':    { ai: 'flex-start', jc: 'center' },
-        'top':           { ai: 'flex-start', jc: 'center' },
-        'top-right':     { ai: 'flex-start', jc: 'flex-end' },
-        'middle-left':   { ai: 'center',     jc: 'flex-start' },
-        'left':          { ai: 'center',     jc: 'flex-start' },
-        'middle-right':  { ai: 'center',     jc: 'flex-end' },
-        'right':         { ai: 'center',     jc: 'flex-end' },
-        'bottom-left':   { ai: 'flex-end',   jc: 'flex-start' },
-        'bottom-center': { ai: 'flex-end',   jc: 'center' },
-        'bottom':        { ai: 'flex-end',   jc: 'center' },
-        'bottom-right':  { ai: 'flex-end',   jc: 'flex-end' },
-      };
-      const placement = map[pos] || map['center'];
-      const page = document.getElementById('canvas-page');
-      page.style.alignItems     = placement.ai;
-      page.style.justifyContent = placement.jc;
-      page.style.padding        = '60px';
-      page.style.transition     = 'all 0.6s cubic-bezier(0.22, 1, 0.36, 1)';
-      showToast(`Jarvis moved to ${pos}`);
+      smoothMoveOrb(pos);
+      showToast(`Moved to ${pos}`);
       break;
     }
     case 'show_location': {
       const loc = action.input?.location;
       if (loc) {
-        const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(loc)}`;
-        window.open(url, '_blank');
-        showToast(`Opening map: ${loc}`);
+        showLocationOnMap(loc);
       }
       break;
     }
     case 'get_weather':
-      // result already returned in chat content; nothing to do UI-side
+      // Result already in chat content
       break;
   }
 }
@@ -1253,6 +1313,112 @@ async function init() {
   await loadSettings();
   await loadLLMStatus();
   setInterval(loadLLMStatus, 30000);
+
+  initMap();
+  setupMapCloser();
+}
+
+// ── MAP SYSTEM ──
+let mapInstance = null;
+let currentMapLocation = null;
+
+function initMap() {
+  const mapContainer = document.getElementById('mapContainer');
+  mapInstance = L.map(mapContainer, {
+    center: [20, 0],
+    zoom: 2,
+    zoomControl: true,
+    attributionControl: true,
+  });
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap',
+    maxZoom: 19,
+  }).addTo(mapInstance);
+
+  mapInstance.setZoom(2);
+}
+
+async function showLocationOnMap(location) {
+  const mapModal = document.getElementById('mapModal');
+  const mapTitle = document.getElementById('mapTitle');
+
+  mapTitle.textContent = location.toUpperCase();
+  mapModal.classList.add('visible');
+
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(location)}`
+    );
+    const results = await response.json();
+
+    if (results.length > 0) {
+      const lat = parseFloat(results[0].lat);
+      const lon = parseFloat(results[0].lon);
+
+      if (currentMapLocation) {
+        mapInstance.flyTo([lat, lon], 12, { duration: 1.5 });
+      } else {
+        mapInstance.flyTo([lat, lon], 12, { duration: 1.2 });
+      }
+
+      currentMapLocation = { lat, lon, name: location };
+
+      mapInstance.eachLayer(layer => {
+        if (layer instanceof L.Marker) layer.remove();
+      });
+
+      L.circleMarker([lat, lon], {
+        radius: 10,
+        fillColor: '#5aa0dc',
+        color: '#96c8ff',
+        weight: 2,
+        opacity: 0.9,
+        fillOpacity: 0.7,
+      }).addTo(mapInstance);
+    } else {
+      showToast(`Location "${location}" not found`);
+    }
+  } catch(e) {
+    showToast(`Map error: ${e.message}`);
+  }
+}
+
+function closeMap() {
+  document.getElementById('mapModal').classList.remove('visible');
+}
+
+function setupMapCloser() {
+  document.getElementById('mapClose').addEventListener('click', closeMap);
+  document.getElementById('mapModal').addEventListener('click', e => {
+    if (e.target.id === 'mapModal') closeMap();
+  });
+}
+
+// ── SMOOTH ORB MOVEMENT ──
+let currentOrbPosition = { alignItems: 'center', justifyContent: 'center' };
+const orbPositionMap = {
+  'center':        { alignItems: 'center',     justifyContent: 'center' },
+  'top-left':      { alignItems: 'flex-start', justifyContent: 'flex-start' },
+  'top-center':    { alignItems: 'flex-start', justifyContent: 'center' },
+  'top-right':     { alignItems: 'flex-start', justifyContent: 'flex-end' },
+  'middle-left':   { alignItems: 'center',     justifyContent: 'flex-start' },
+  'middle-right':  { alignItems: 'center',     justifyContent: 'flex-end' },
+  'bottom-left':   { alignItems: 'flex-end',   justifyContent: 'flex-start' },
+  'bottom-center': { alignItems: 'flex-end',   justifyContent: 'center' },
+  'bottom-right':  { alignItems: 'flex-end',   justifyContent: 'flex-end' },
+};
+
+function smoothMoveOrb(position) {
+  const target = orbPositionMap[position.toLowerCase()] || orbPositionMap['center'];
+  const page = document.getElementById('canvas-page');
+
+  page.style.alignItems = target.alignItems;
+  page.style.justifyContent = target.justifyContent;
+  page.style.padding = '60px';
+  page.style.transition = 'all 0.8s cubic-bezier(0.22, 1, 0.36, 1)';
+
+  currentOrbPosition = target;
 }
 
 init();
