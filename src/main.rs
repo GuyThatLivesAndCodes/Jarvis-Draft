@@ -14,7 +14,6 @@ use axum::{
 use models::AIProvider;
 use settings::Settings;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::RwLock;
 use tao::event_loop::EventLoop;
 use tao::window::WindowBuilder;
@@ -27,20 +26,16 @@ You are intelligent, knowledgeable, and always act in the user's best interest."
 
 #[derive(Clone)]
 struct AppState {
-    settings:      Arc<RwLock<Settings>>,
-    llm_status:    Arc<RwLock<models::LLMStatus>>,
-    is_locked:     Arc<AtomicBool>,
-    lock_password: Arc<RwLock<String>>,
+    settings:   Arc<RwLock<Settings>>,
+    llm_status: Arc<RwLock<models::LLMStatus>>,
 }
 
 #[tokio::main]
 async fn main() {
     env_logger::init();
 
-    let settings       = Arc::new(RwLock::new(Settings::load()));
-    let llm_status     = Arc::new(RwLock::new(models::LLMStatus::default()));
-    let is_locked      = Arc::new(AtomicBool::new(false));
-    let lock_password  = Arc::new(RwLock::new(String::new()));
+    let settings   = Arc::new(RwLock::new(Settings::load()));
+    let llm_status = Arc::new(RwLock::new(models::LLMStatus::default()));
 
     // Background LLM status polling
     {
@@ -57,8 +52,6 @@ async fn main() {
     let state = AppState {
         settings,
         llm_status,
-        is_locked,
-        lock_password,
     };
 
     let app = Router::new()
@@ -66,8 +59,6 @@ async fn main() {
         .route("/api/settings", get(get_settings).post(save_settings))
         .route("/api/query", post(query_ai))
         .route("/api/llm-status", get(get_llm_status))
-        .route("/api/lock", get(get_lock_status).post(set_lock))
-        .route("/api/unlock", post(unlock))
         .with_state(state);
 
     // Start Axum server in background
@@ -189,42 +180,4 @@ async fn query_ai(
 
 async fn get_llm_status(State(s): State<AppState>) -> Json<models::LLMStatus> {
     Json(s.llm_status.read().await.clone())
-}
-
-async fn get_lock_status(State(s): State<AppState>) -> Json<serde_json::Value> {
-    Json(serde_json::json!({
-        "locked": s.is_locked.load(Ordering::Relaxed),
-    }))
-}
-
-#[derive(serde::Deserialize)]
-struct LockBody {
-    password: Option<String>,
-}
-
-async fn set_lock(State(s): State<AppState>, Json(body): Json<LockBody>) -> Json<serde_json::Value> {
-    if let Some(pwd) = body.password {
-        let mut lock_pwd = s.lock_password.write().await;
-        *lock_pwd = pwd;
-    }
-    s.is_locked.store(true, Ordering::Relaxed);
-    Json(serde_json::json!({"ok": true, "locked": true}))
-}
-
-#[derive(serde::Deserialize)]
-struct UnlockBody {
-    password: String,
-}
-
-async fn unlock(
-    State(s): State<AppState>,
-    Json(body): Json<UnlockBody>,
-) -> impl IntoResponse {
-    let lock_pwd = s.lock_password.read().await;
-    if lock_pwd.as_str() == body.password.as_str() || body.password.is_empty() {
-        s.is_locked.store(false, Ordering::Relaxed);
-        Json(serde_json::json!({"ok": true, "locked": false})).into_response()
-    } else {
-        (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "Invalid password"}))).into_response()
-    }
 }

@@ -524,70 +524,6 @@
     box-shadow: 0 0 22px rgba(45,125,215,0.22);
   }
 
-  /* ── LOCK SCREEN ── */
-  #lockScreen {
-    position: fixed; inset: 0; z-index: 200;
-    background: rgba(0,0,0,0.95);
-    backdrop-filter: blur(10px);
-    display: none;
-    align-items: center; justify-content: center;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-  }
-  #lockScreen.active { opacity: 1; }
-
-  .lock-box {
-    display: flex; flex-direction: column; align-items: center; gap: 24px;
-    padding: 40px;
-    text-align: center;
-  }
-
-  .lock-icon {
-    font-size: 48px;
-    color: rgba(80,160,240,0.9);
-    animation: lockPulse 2s ease-in-out infinite;
-  }
-
-  @keyframes lockPulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.1); }
-  }
-
-  .lock-text {
-    font-size: 0.8rem; letter-spacing: 0.2em;
-    color: rgba(150,200,255,0.85);
-    font-family: 'Orbitron', monospace;
-  }
-
-  .lock-input {
-    width: 200px; height: 40px;
-    background: rgba(10,25,45,0.8);
-    border: 1px solid rgba(80,140,210,0.5);
-    border-radius: 8px;
-    color: rgba(180,220,255,0.9);
-    font-family: monospace;
-    font-size: 1rem;
-    padding: 0 12px;
-    text-align: center;
-    letter-spacing: 0.3em;
-    outline: none;
-  }
-
-  .lock-btn {
-    width: 120px; height: 40px;
-    border-radius: 8px;
-    background: rgba(30,100,180,0.4);
-    border: 1px solid rgba(60,140,220,0.5);
-    color: rgba(150,210,255,0.9);
-    font-family: 'Orbitron', monospace;
-    font-size: 0.6rem;
-    letter-spacing: 0.15em;
-    cursor: pointer;
-    transition: background 0.2s;
-  }
-  .lock-btn:hover {
-    background: rgba(40,120,200,0.55);
-  }
 
   /* ── TOAST ── */
   #toast {
@@ -739,29 +675,8 @@
       <div class="llm-status-text" id="llmStatusDisplay">Checking...</div>
     </div>
 
-    <div class="settings-section">
-      <div class="settings-section-label">SECURITY</div>
-      <div class="settings-toggle-row">
-        <span class="settings-toggle-label">ENABLE LOCK FEATURE</span>
-        <div class="toggle" id="toggleLock"></div>
-      </div>
-      <div class="settings-row" id="lockPasswordRow" style="display:none;">
-        <span class="settings-key-label">PASSWORD</span>
-        <input class="settings-input" id="lockPassword" type="password" placeholder="Set a lock password..." />
-      </div>
-    </div>
 
     <button class="settings-save" id="settingsSave">SAVE SETTINGS</button>
-  </div>
-</div>
-
-<!-- LOCK SCREEN -->
-<div id="lockScreen">
-  <div class="lock-box">
-    <div class="lock-icon">🔒</div>
-    <div class="lock-text">JARVIS IS LOCKED</div>
-    <input class="lock-input" id="lockPassword Input" type="password" placeholder="Password" />
-    <button class="lock-btn" id="unlockBtn">UNLOCK</button>
   </div>
 </div>
 
@@ -897,7 +812,6 @@ let settings = {};
 let llmStatus = { ollama_available: false, lm_studio_available: false, ollama_models: [], lm_studio_models: [] };
 let prevLlmStatus = null;
 let settingsOpen = false;
-let isLocked = false;
 let chatMinimized = false;
 
 // Chat Panel Dragging
@@ -1094,7 +1008,7 @@ function hideLoading() {
 }
 
 async function sendQuery(text) {
-  if (!text.trim() || isLocked) return;
+  if (!text.trim()) return;
   activate();
   chatHistory.push({ role: 'user', content: text });
   renderChat();
@@ -1192,12 +1106,6 @@ document.getElementById('statusBtn').addEventListener('click', () => {
   });
 });
 
-document.getElementById('toggleLock').addEventListener('click', function() {
-  this.classList.toggle('on');
-  document.getElementById('lockPasswordRow').style.display =
-    this.classList.contains('on') ? 'flex' : 'none';
-});
-
 document.getElementById('settingsSave').addEventListener('click', async () => {
   const body = {
     anthropic_key: document.getElementById('keyAnthropic').value,
@@ -1221,56 +1129,35 @@ document.getElementById('settingsSave').addEventListener('click', async () => {
   }
 });
 
-// Lock Feature
-async function checkLockStatus() {
-  try {
-    const status = await apiGet('/api/lock');
-    if (status.locked && !isLocked) showLockScreen();
-  } catch(e) {}
+// Reset to Splash
+function resetToSplash() {
+  activated = false;
+  chatHistory = [];
+  document.getElementById('chatPanel').style.display = 'none';
+  document.getElementById('chatPanel').classList.remove('visible', 'minimized');
+  document.getElementById('chatContent').innerHTML = '';
+
+  const splash = document.getElementById('splash');
+  const page = document.getElementById('canvas-page');
+  const grid = document.getElementById('gridCanvas');
+  const circle = document.getElementById('jarvisCircle');
+  const dashboard = document.getElementById('dashboard');
+
+  splash.classList.remove('hiding');
+  pCanvas.classList.remove('hidden');
+  pActive = true;
+
+  page.style.display = 'none';
+  page.classList.remove('visible');
+  circle.classList.remove('entered', 'thinking');
+  grid.classList.remove('visible');
+  dashboard.classList.remove('visible');
+
+  document.getElementById('askInput').value = '';
+  showToast('Reset to home');
 }
 
-function showLockScreen() {
-  isLocked = true;
-  document.getElementById('lockScreen').classList.add('active');
-  document.getElementById('lockScreen').style.display = 'flex';
-  document.getElementById('lockPasswordInput').focus();
-}
-
-function hideLockScreen() {
-  isLocked = false;
-  const lock = document.getElementById('lockScreen');
-  lock.classList.remove('active');
-  setTimeout(() => { lock.style.display = 'none'; }, 300);
-}
-
-document.getElementById('lockBtn').addEventListener('click', async () => {
-  if (isLocked) return;
-  try {
-    await apiPost('/api/lock', { password: document.getElementById('lockPassword').value || '' });
-    showLockScreen();
-    showToast('Jarvis locked');
-  } catch(e) {
-    showToast('Lock failed: ' + e.message);
-  }
-});
-
-document.getElementById('unlockBtn').addEventListener('click', async () => {
-  try {
-    const pwd = document.getElementById('lockPasswordInput').value;
-    await apiPost('/api/unlock', { password: pwd });
-    document.getElementById('lockPasswordInput').value = '';
-    hideLockScreen();
-    showToast('Unlocked');
-  } catch(e) {
-    showToast('Invalid password');
-  }
-});
-
-document.getElementById('lockPasswordInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter') document.getElementById('unlockBtn').click();
-});
-
-setInterval(checkLockStatus, 5000);
+document.getElementById('lockBtn').addEventListener('click', resetToSplash);
 
 // Toast
 let toastTimer = null;
