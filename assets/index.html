@@ -1030,6 +1030,50 @@ function hideLoading() {
   document.getElementById('loadingDots')?.remove();
 }
 
+function handleToolAction(action) {
+  if (!action || !action.name) return;
+  switch (action.name) {
+    case 'move_jarvis': {
+      const pos = (action.input?.position || 'center').toLowerCase();
+      const map = {
+        'center':        { ai: 'center',     jc: 'center' },
+        'top-left':      { ai: 'flex-start', jc: 'flex-start' },
+        'top-center':    { ai: 'flex-start', jc: 'center' },
+        'top':           { ai: 'flex-start', jc: 'center' },
+        'top-right':     { ai: 'flex-start', jc: 'flex-end' },
+        'middle-left':   { ai: 'center',     jc: 'flex-start' },
+        'left':          { ai: 'center',     jc: 'flex-start' },
+        'middle-right':  { ai: 'center',     jc: 'flex-end' },
+        'right':         { ai: 'center',     jc: 'flex-end' },
+        'bottom-left':   { ai: 'flex-end',   jc: 'flex-start' },
+        'bottom-center': { ai: 'flex-end',   jc: 'center' },
+        'bottom':        { ai: 'flex-end',   jc: 'center' },
+        'bottom-right':  { ai: 'flex-end',   jc: 'flex-end' },
+      };
+      const placement = map[pos] || map['center'];
+      const page = document.getElementById('canvas-page');
+      page.style.alignItems     = placement.ai;
+      page.style.justifyContent = placement.jc;
+      page.style.padding        = '60px';
+      page.style.transition     = 'all 0.6s cubic-bezier(0.22, 1, 0.36, 1)';
+      showToast(`Jarvis moved to ${pos}`);
+      break;
+    }
+    case 'show_location': {
+      const loc = action.input?.location;
+      if (loc) {
+        const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(loc)}`;
+        window.open(url, '_blank');
+        showToast(`Opening map: ${loc}`);
+      }
+      break;
+    }
+    case 'get_weather':
+      // result already returned in chat content; nothing to do UI-side
+      break;
+  }
+}
+
 async function sendQuery(text) {
   if (!text.trim()) return;
   activate();
@@ -1048,6 +1092,11 @@ async function sendQuery(text) {
     });
     hideLoading();
     circle.classList.remove('thinking');
+    if (Array.isArray(resp.tool_actions)) {
+      for (const action of resp.tool_actions) {
+        handleToolAction(action);
+      }
+    }
     chatHistory.push({ role: 'assistant', content: resp.content });
     renderChat();
   } catch(e) {
@@ -1168,6 +1217,10 @@ function resetToSplash() {
   const grid = document.getElementById('gridCanvas');
   const circle = document.getElementById('jarvisCircle');
   const dashboard = document.getElementById('dashboard');
+
+  page.style.alignItems = '';
+  page.style.justifyContent = '';
+  page.style.padding = '';
 
   splash.classList.remove('hiding');
   pCanvas.classList.remove('hidden');

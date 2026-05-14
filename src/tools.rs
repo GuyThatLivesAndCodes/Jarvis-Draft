@@ -38,15 +38,15 @@ pub fn get_tools() -> Vec<ToolDefinition> {
             }),
         },
         ToolDefinition {
-            name: "move_chat_panel".to_string(),
-            description: "Move the chat panel to a new position on the dashboard".to_string(),
+            name: "move_jarvis".to_string(),
+            description: "Move Jarvis (the central glowing orb) to a new position on the screen. Use this when the user asks you to move yourself or move the Jarvis orb.".to_string(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "position": {
                         "type": "string",
-                        "enum": ["top", "bottom", "left", "right", "center", "top-left", "top-right", "bottom-left", "bottom-right"],
-                        "description": "New position for the chat panel"
+                        "enum": ["center", "top-left", "top-center", "top-right", "middle-left", "middle-right", "bottom-left", "bottom-center", "bottom-right"],
+                        "description": "Where to move Jarvis on the screen"
                     }
                 },
                 "required": ["position"]
@@ -76,7 +76,7 @@ pub fn get_tools() -> Vec<ToolDefinition> {
 pub async fn execute_tool(name: &str, input: serde_json::Value) -> Result<String, String> {
     match name {
         "get_weather" => get_weather(&input).await,
-        "move_chat_panel" => move_chat_panel(&input),
+        "move_jarvis" => move_jarvis(&input),
         "show_location" => show_location(&input),
         _ => Err(format!("Unknown tool: {}", name)),
     }
@@ -166,16 +166,13 @@ async fn get_weather(input: &serde_json::Value) -> Result<String, String> {
     ))
 }
 
-fn move_chat_panel(input: &serde_json::Value) -> Result<String, String> {
+fn move_jarvis(input: &serde_json::Value) -> Result<String, String> {
     let position = input
         .get("position")
         .and_then(|v| v.as_str())
         .ok_or("Missing position parameter")?;
 
-    Ok(format!(
-        "Chat panel moved to: {}. This change will be reflected in your interface.",
-        position
-    ))
+    Ok(format!("Moved to {}.", position))
 }
 
 fn show_location(input: &serde_json::Value) -> Result<String, String> {

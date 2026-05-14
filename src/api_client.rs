@@ -1,4 +1,4 @@
-use crate::models::{AIProvider, ChatMessage, AIResponse};
+use crate::models::{AIProvider, ChatMessage, AIResponse, ToolAction};
 use crate::tools;
 
 pub async fn query(
@@ -7,7 +7,6 @@ pub async fn query(
     api_key:  Option<String>,
     model_override: Option<String>,
 ) -> Result<AIResponse, String> {
-    // Extract system message if present
     let system_msg = if !messages.is_empty() && messages[0].role == "system" {
         Some(messages.remove(0).content)
     } else {
@@ -27,6 +26,7 @@ async fn anthropic(mut msgs: Vec<ChatMessage>, system: Option<String>, key: Opti
     let key   = key.ok_or("Missing Anthropic API key")?;
     let model = model_override.unwrap_or_else(|| "claude-3-5-sonnet-20241022".to_string());
     let tools_list = tools::get_tools();
+    let mut tool_actions: Vec<ToolAction> = Vec::new();
 
     loop {
         let mut body = serde_json::json!({
@@ -62,7 +62,7 @@ async fn anthropic(mut msgs: Vec<ChatMessage>, system: Option<String>, key: Opti
 
         for block in content_blocks {
             if let Some(text) = block.get("text").and_then(|t| t.as_str()) {
-                final_text = text.to_string();
+                final_text.push_str(text);
             }
 
             if block.get("type").and_then(|t| t.as_str()) == Some("tool_use") {
@@ -70,6 +70,11 @@ async fn anthropic(mut msgs: Vec<ChatMessage>, system: Option<String>, key: Opti
                 let tool_id = block.get("id").and_then(|id| id.as_str()).unwrap_or("");
                 let tool_name = block.get("name").and_then(|n| n.as_str()).unwrap_or("");
                 let tool_input = block.get("input").cloned().unwrap_or(serde_json::json!({}));
+
+                tool_actions.push(ToolAction {
+                    name:  tool_name.to_string(),
+                    input: tool_input.clone(),
+                });
 
                 match tools::execute_tool(tool_name, tool_input).await {
                     Ok(result) => {
@@ -92,10 +97,9 @@ async fn anthropic(mut msgs: Vec<ChatMessage>, system: Option<String>, key: Opti
         }
 
         if !has_tool_use {
-            return Ok(AIResponse { content: final_text, provider: AIProvider::Anthropic, model });
+            return Ok(AIResponse { content: final_text, provider: AIProvider::Anthropic, model, tool_actions });
         }
 
-        // Add assistant response with tool use to messages
         let mut assistant_content = Vec::new();
         for block in content_blocks {
             assistant_content.push(block.clone());
@@ -105,7 +109,6 @@ async fn anthropic(mut msgs: Vec<ChatMessage>, system: Option<String>, key: Opti
             content: serde_json::to_string(&assistant_content).unwrap_or_default(),
         });
 
-        // Add tool results
         for result in tool_results {
             msgs.push(ChatMessage {
                 role: "user".to_string(),
@@ -116,77 +119,40 @@ async fn anthropic(mut msgs: Vec<ChatMessage>, system: Option<String>, key: Opti
 }
 
 async fn openai(msgs: Vec<ChatMessage>, key: Option<String>, model_override: Option<String>) -> Result<AIResponse, String> {
-    let key   = key.ok_or("Missing OpenAI API key")?;
-    let model = model_override.unwrap_or_else(|| "gpt-4o-mini".to_string());
-    let tools_list = tools::get_tools();
-
-    let mut body = serde_json::json!({
-        "model": model,
-        "messages": msgs.iter().map(|m| serde_json::json!({"role":m.role,"content":m.content})).collect::<Vec<_>>(),
-        "tools": tools_list.iter().map(|t| serde_json::json!({
-            "type": "function",
-            "function": {
-                "name": t.name,
-                "description": t.description,
-                "parameters": t.input_schema
-            }
-        })).collect::<Vec<_>>(),
-        "tool_choice": "auto"
-    });
-
-    let resp: serde_json::Value = reqwest::Client::new()
-        .post("https://api.openai.com/v1/chat/completions")
-        .header("Authorization", format!("Bearer {key}"))
-        .json(&body).send().await.map_err(|e| e.to_string())?
-        .json().await.map_err(|e| e.to_string())?;
-
-    if let Some(err) = resp.get("error") {
-        return Err(format!("OpenAI Error: {}", err.get("message").unwrap_or(&serde_json::json!("Unknown error"))));
-    }
-
-    // Check for function call in response
-    let message = resp["choices"]
-        .get(0)
-        .and_then(|c| c.get("message"))
-        .ok_or("Invalid response format from OpenAI")?;
-
-    if let Some(fn_call) = message.get("tool_calls").and_then(|tc| tc.get(0)) {
-        let fn_name = fn_call.get("function").and_then(|f| f.get("name")).and_then(|n| n.as_str()).unwrap_or("");
-        let fn_args_str = fn_call.get("function").and_then(|f| f.get("arguments")).and_then(|a| a.as_str()).unwrap_or("{}");
-        let fn_args: serde_json::Value = serde_json::from_str(fn_args_str).unwrap_or(serde_json::json!({}));
-
-        match tools::execute_tool(fn_name, fn_args).await {
-            Ok(result) => {
-                return Ok(AIResponse {
-                    content: format!("[Executed: {}]\n{}", fn_name, result),
-                    provider: AIProvider::OpenAI,
-                    model
-                });
-            }
-            Err(e) => {
-                return Ok(AIResponse {
-                    content: format!("[Tool Error: {}]\n{}", fn_name, e),
-                    provider: AIProvider::OpenAI,
-                    model
-                });
-            }
-        }
-    }
-
-    let content = message
-        .get("content")
-        .and_then(|c| c.as_str())
-        .ok_or("Invalid response format from OpenAI")?
-        .to_string();
-    Ok(AIResponse { content, provider: AIProvider::OpenAI, model })
+    openai_compatible(
+        msgs, key, model_override,
+        "https://api.openai.com/v1/chat/completions",
+        "gpt-4o-mini",
+        AIProvider::OpenAI,
+        "OpenAI",
+    ).await
 }
 
 async fn xai(msgs: Vec<ChatMessage>, key: Option<String>, model_override: Option<String>) -> Result<AIResponse, String> {
-    let key   = key.ok_or("Missing xAI API key")?;
-    let model = model_override.unwrap_or_else(|| "grok-4.3".to_string());
-    let tools_list = tools::get_tools();
+    openai_compatible(
+        msgs, key, model_override,
+        "https://api.x.ai/v1/chat/completions",
+        "grok-4.3",
+        AIProvider::XAI,
+        "xAI",
+    ).await
+}
 
-    let mut body = serde_json::json!({
+async fn openai_compatible(
+    msgs: Vec<ChatMessage>,
+    key: Option<String>,
+    model_override: Option<String>,
+    url: &str,
+    default_model: &str,
+    provider: AIProvider,
+    provider_label: &str,
+) -> Result<AIResponse, String> {
+    let key   = key.ok_or(format!("Missing {} API key", provider_label))?;
+    let model = model_override.unwrap_or_else(|| default_model.to_string());
+    let tools_list = tools::get_tools();
+    let mut tool_actions: Vec<ToolAction> = Vec::new();
+
+    let body = serde_json::json!({
         "model": model,
         "messages": msgs.iter().map(|m| serde_json::json!({"role":m.role,"content":m.content})).collect::<Vec<_>>(),
         "tools": tools_list.iter().map(|t| serde_json::json!({
@@ -201,7 +167,7 @@ async fn xai(msgs: Vec<ChatMessage>, key: Option<String>, model_override: Option
     });
 
     let resp: serde_json::Value = reqwest::Client::new()
-        .post("https://api.x.ai/v1/chat/completions")
+        .post(url)
         .header("Authorization", format!("Bearer {key}"))
         .json(&body).send().await.map_err(|e| e.to_string())?
         .json().await.map_err(|e| e.to_string())?;
@@ -210,45 +176,46 @@ async fn xai(msgs: Vec<ChatMessage>, key: Option<String>, model_override: Option
         let err_msg = err.get("message")
             .and_then(|m| m.as_str())
             .unwrap_or_else(|| err.as_str().unwrap_or("Check API key and rate limits"));
-        return Err(format!("xAI Error: {}", err_msg));
+        return Err(format!("{} Error: {}", provider_label, err_msg));
     }
 
-    // For simplicity, just get the text response (handle function calls if they appear)
     let message = resp["choices"]
         .get(0)
         .and_then(|c| c.get("message"))
-        .ok_or("Invalid response format from xAI")?;
+        .ok_or(format!("Invalid response format from {}", provider_label))?;
 
-    // Check if there's a function call
-    if let Some(fn_call) = message.get("tool_calls").and_then(|tc| tc.get(0)) {
-        let fn_name = fn_call.get("function").and_then(|f| f.get("name")).and_then(|n| n.as_str()).unwrap_or("");
-        let fn_args_str = fn_call.get("function").and_then(|f| f.get("arguments")).and_then(|a| a.as_str()).unwrap_or("{}");
-        let fn_args: serde_json::Value = serde_json::from_str(fn_args_str).unwrap_or(serde_json::json!({}));
+    let text_content = message.get("content").and_then(|c| c.as_str()).unwrap_or("").to_string();
 
-        match tools::execute_tool(fn_name, fn_args).await {
-            Ok(result) => {
-                return Ok(AIResponse {
-                    content: format!("[Executed: {}]\n{}", fn_name, result),
-                    provider: AIProvider::XAI,
-                    model
-                });
-            }
-            Err(e) => {
-                return Ok(AIResponse {
-                    content: format!("[Tool Error: {}]\n{}", fn_name, e),
-                    provider: AIProvider::XAI,
-                    model
-                });
+    if let Some(tool_calls) = message.get("tool_calls").and_then(|tc| tc.as_array()) {
+        let mut results_text = Vec::new();
+        for fn_call in tool_calls {
+            let fn_name = fn_call.get("function").and_then(|f| f.get("name")).and_then(|n| n.as_str()).unwrap_or("");
+            let fn_args_str = fn_call.get("function").and_then(|f| f.get("arguments")).and_then(|a| a.as_str()).unwrap_or("{}");
+            let fn_args: serde_json::Value = serde_json::from_str(fn_args_str).unwrap_or(serde_json::json!({}));
+
+            tool_actions.push(ToolAction {
+                name:  fn_name.to_string(),
+                input: fn_args.clone(),
+            });
+
+            match tools::execute_tool(fn_name, fn_args).await {
+                Ok(result) => results_text.push(result),
+                Err(e)     => results_text.push(format!("Error: {}", e)),
             }
         }
+
+        let content = if text_content.is_empty() {
+            results_text.join("\n")
+        } else {
+            format!("{}\n{}", text_content, results_text.join("\n"))
+        };
+        return Ok(AIResponse { content, provider, model, tool_actions });
     }
 
-    let content = message
-        .get("content")
-        .and_then(|c| c.as_str())
-        .ok_or("Invalid response format from xAI")?
-        .to_string();
-    Ok(AIResponse { content, provider: AIProvider::XAI, model })
+    if text_content.is_empty() {
+        return Err(format!("Empty response from {}", provider_label));
+    }
+    Ok(AIResponse { content: text_content, provider, model, tool_actions })
 }
 
 async fn ollama(msgs: Vec<ChatMessage>) -> Result<AIResponse, String> {
@@ -269,14 +236,26 @@ async fn ollama(msgs: Vec<ChatMessage>) -> Result<AIResponse, String> {
         .and_then(|r| r.as_str())
         .ok_or("Invalid response format from Ollama")?
         .to_string();
-    Ok(AIResponse { content, provider: AIProvider::Ollama, model })
+    Ok(AIResponse { content, provider: AIProvider::Ollama, model, tool_actions: vec![] })
 }
 
 async fn lm_studio(msgs: Vec<ChatMessage>) -> Result<AIResponse, String> {
     let model = "local-model".to_string();
+    let tools_list = tools::get_tools();
+    let mut tool_actions: Vec<ToolAction> = Vec::new();
+
     let body  = serde_json::json!({
         "model": "",
         "messages": msgs.iter().map(|m| serde_json::json!({"role":m.role,"content":m.content})).collect::<Vec<_>>(),
+        "tools": tools_list.iter().map(|t| serde_json::json!({
+            "type": "function",
+            "function": {
+                "name": t.name,
+                "description": t.description,
+                "parameters": t.input_schema
+            }
+        })).collect::<Vec<_>>(),
+        "tool_choice": "auto",
         "temperature": 0.7
     });
 
@@ -289,12 +268,41 @@ async fn lm_studio(msgs: Vec<ChatMessage>) -> Result<AIResponse, String> {
         return Err(format!("LM Studio Error: {}", err.get("message").unwrap_or(&serde_json::json!("Unknown error"))));
     }
 
-    let content = resp["choices"]
+    let message = resp["choices"]
         .get(0)
         .and_then(|c| c.get("message"))
-        .and_then(|m| m.get("content"))
-        .and_then(|c| c.as_str())
-        .ok_or("Invalid response format from LM Studio. Make sure a model is loaded and the server is running.")?
-        .to_string();
-    Ok(AIResponse { content, provider: AIProvider::LMStudio, model })
+        .ok_or("Invalid response from LM Studio. Make sure a model is loaded and the server is running.")?;
+
+    let text_content = message.get("content").and_then(|c| c.as_str()).unwrap_or("").to_string();
+
+    if let Some(tool_calls) = message.get("tool_calls").and_then(|tc| tc.as_array()) {
+        let mut results_text = Vec::new();
+        for fn_call in tool_calls {
+            let fn_name = fn_call.get("function").and_then(|f| f.get("name")).and_then(|n| n.as_str()).unwrap_or("");
+            let fn_args_str = fn_call.get("function").and_then(|f| f.get("arguments")).and_then(|a| a.as_str()).unwrap_or("{}");
+            let fn_args: serde_json::Value = serde_json::from_str(fn_args_str).unwrap_or(serde_json::json!({}));
+
+            tool_actions.push(ToolAction {
+                name:  fn_name.to_string(),
+                input: fn_args.clone(),
+            });
+
+            match tools::execute_tool(fn_name, fn_args).await {
+                Ok(result) => results_text.push(result),
+                Err(e)     => results_text.push(format!("Error: {}", e)),
+            }
+        }
+
+        let content = if text_content.is_empty() {
+            results_text.join("\n")
+        } else {
+            format!("{}\n{}", text_content, results_text.join("\n"))
+        };
+        return Ok(AIResponse { content, provider: AIProvider::LMStudio, model, tool_actions });
+    }
+
+    if text_content.is_empty() {
+        return Err("Empty response from LM Studio. Make sure a model is loaded.".to_string());
+    }
+    Ok(AIResponse { content: text_content, provider: AIProvider::LMStudio, model, tool_actions })
 }

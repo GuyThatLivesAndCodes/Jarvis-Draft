@@ -56,8 +56,16 @@ pub struct ChatMessage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolAction {
+    pub name:  String,
+    pub input: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AIResponse {
-    pub content:  String,
-    pub provider: AIProvider,
-    pub model:    String,
+    pub content:      String,
+    pub provider:     AIProvider,
+    pub model:        String,
+    #[serde(default)]
+    pub tool_actions: Vec<ToolAction>,
 }
