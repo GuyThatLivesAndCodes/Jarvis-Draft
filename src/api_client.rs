@@ -118,9 +118,20 @@ async fn anthropic(mut msgs: Vec<ChatMessage>, system: Option<String>, key: Opti
 async fn openai(msgs: Vec<ChatMessage>, key: Option<String>, model_override: Option<String>) -> Result<AIResponse, String> {
     let key   = key.ok_or("Missing OpenAI API key")?;
     let model = model_override.unwrap_or_else(|| "gpt-4o-mini".to_string());
-    let body  = serde_json::json!({
+    let tools_list = tools::get_tools();
+
+    let mut body = serde_json::json!({
         "model": model,
-        "messages": msgs.iter().map(|m| serde_json::json!({"role":m.role,"content":m.content})).collect::<Vec<_>>()
+        "messages": msgs.iter().map(|m| serde_json::json!({"role":m.role,"content":m.content})).collect::<Vec<_>>(),
+        "tools": tools_list.iter().map(|t| serde_json::json!({
+            "type": "function",
+            "function": {
+                "name": t.name,
+                "description": t.description,
+                "parameters": t.input_schema
+            }
+        })).collect::<Vec<_>>(),
+        "tool_choice": "auto"
     });
 
     let resp: serde_json::Value = reqwest::Client::new()
@@ -133,10 +144,37 @@ async fn openai(msgs: Vec<ChatMessage>, key: Option<String>, model_override: Opt
         return Err(format!("OpenAI Error: {}", err.get("message").unwrap_or(&serde_json::json!("Unknown error"))));
     }
 
-    let content = resp["choices"]
+    // Check for function call in response
+    let message = resp["choices"]
         .get(0)
         .and_then(|c| c.get("message"))
-        .and_then(|m| m.get("content"))
+        .ok_or("Invalid response format from OpenAI")?;
+
+    if let Some(fn_call) = message.get("tool_calls").and_then(|tc| tc.get(0)) {
+        let fn_name = fn_call.get("function").and_then(|f| f.get("name")).and_then(|n| n.as_str()).unwrap_or("");
+        let fn_args_str = fn_call.get("function").and_then(|f| f.get("arguments")).and_then(|a| a.as_str()).unwrap_or("{}");
+        let fn_args: serde_json::Value = serde_json::from_str(fn_args_str).unwrap_or(serde_json::json!({}));
+
+        match tools::execute_tool(fn_name, fn_args).await {
+            Ok(result) => {
+                return Ok(AIResponse {
+                    content: format!("[Executed: {}]\n{}", fn_name, result),
+                    provider: AIProvider::OpenAI,
+                    model
+                });
+            }
+            Err(e) => {
+                return Ok(AIResponse {
+                    content: format!("[Tool Error: {}]\n{}", fn_name, e),
+                    provider: AIProvider::OpenAI,
+                    model
+                });
+            }
+        }
+    }
+
+    let content = message
+        .get("content")
         .and_then(|c| c.as_str())
         .ok_or("Invalid response format from OpenAI")?
         .to_string();
