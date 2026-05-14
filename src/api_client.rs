@@ -4,6 +4,7 @@ pub async fn query(
     provider: AIProvider,
     mut messages: Vec<ChatMessage>,
     api_key:  Option<String>,
+    model_override: Option<String>,
 ) -> Result<AIResponse, String> {
     // Extract system message if present
     let system_msg = if !messages.is_empty() && messages[0].role == "system" {
@@ -13,17 +14,17 @@ pub async fn query(
     };
 
     match provider {
-        AIProvider::Anthropic => anthropic(messages, system_msg, api_key).await,
-        AIProvider::OpenAI    => openai(messages, api_key).await,
-        AIProvider::XAI       => xai(messages, api_key).await,
+        AIProvider::Anthropic => anthropic(messages, system_msg, api_key, model_override).await,
+        AIProvider::OpenAI    => openai(messages, api_key, model_override).await,
+        AIProvider::XAI       => xai(messages, api_key, model_override).await,
         AIProvider::Ollama    => ollama(messages).await,
         AIProvider::LMStudio  => lm_studio(messages).await,
     }
 }
 
-async fn anthropic(msgs: Vec<ChatMessage>, system: Option<String>, key: Option<String>) -> Result<AIResponse, String> {
+async fn anthropic(msgs: Vec<ChatMessage>, system: Option<String>, key: Option<String>, model_override: Option<String>) -> Result<AIResponse, String> {
     let key   = key.ok_or("Missing Anthropic API key")?;
-    let model = "claude-3-5-sonnet-20241022".to_string();
+    let model = model_override.unwrap_or_else(|| "claude-3-5-sonnet-20241022".to_string());
 
     let mut body = serde_json::json!({
         "model": model,
@@ -56,9 +57,9 @@ async fn anthropic(msgs: Vec<ChatMessage>, system: Option<String>, key: Option<S
     Ok(AIResponse { content, provider: AIProvider::Anthropic, model })
 }
 
-async fn openai(msgs: Vec<ChatMessage>, key: Option<String>) -> Result<AIResponse, String> {
+async fn openai(msgs: Vec<ChatMessage>, key: Option<String>, model_override: Option<String>) -> Result<AIResponse, String> {
     let key   = key.ok_or("Missing OpenAI API key")?;
-    let model = "gpt-4o-mini".to_string();
+    let model = model_override.unwrap_or_else(|| "gpt-4o-mini".to_string());
     let body  = serde_json::json!({
         "model": model,
         "messages": msgs.iter().map(|m| serde_json::json!({"role":m.role,"content":m.content})).collect::<Vec<_>>()
@@ -84,9 +85,9 @@ async fn openai(msgs: Vec<ChatMessage>, key: Option<String>) -> Result<AIRespons
     Ok(AIResponse { content, provider: AIProvider::OpenAI, model })
 }
 
-async fn xai(msgs: Vec<ChatMessage>, key: Option<String>) -> Result<AIResponse, String> {
+async fn xai(msgs: Vec<ChatMessage>, key: Option<String>, model_override: Option<String>) -> Result<AIResponse, String> {
     let key   = key.ok_or("Missing xAI API key")?;
-    let model = "grok-2".to_string();
+    let model = model_override.unwrap_or_else(|| "grok-4.3".to_string());
     let body  = serde_json::json!({
         "model": model,
         "messages": msgs.iter().map(|m| serde_json::json!({"role":m.role,"content":m.content})).collect::<Vec<_>>()

@@ -128,8 +128,11 @@ async fn get_settings(State(s): State<AppState>) -> Json<serde_json::Value> {
 #[derive(serde::Deserialize)]
 struct SaveSettingsBody {
     anthropic_key:             Option<String>,
+    anthropic_model:           Option<String>,
     openai_key:                Option<String>,
+    openai_model:              Option<String>,
     xai_key:                   Option<String>,
+    xai_model:                 Option<String>,
     auto_switch_to_local:      Option<bool>,
     notify_on_local_available: Option<bool>,
 }
@@ -140,8 +143,11 @@ async fn save_settings(
 ) -> Json<serde_json::Value> {
     let mut settings = s.settings.write().await;
     if let Some(k) = body.anthropic_key { if !k.is_empty() { settings.set_key(AIProvider::Anthropic, k); } }
+    if let Some(m) = body.anthropic_model { if !m.is_empty() { settings.set_model(AIProvider::Anthropic, m); } }
     if let Some(k) = body.openai_key    { if !k.is_empty() { settings.set_key(AIProvider::OpenAI, k); } }
+    if let Some(m) = body.openai_model { if !m.is_empty() { settings.set_model(AIProvider::OpenAI, m); } }
     if let Some(k) = body.xai_key       { if !k.is_empty() { settings.set_key(AIProvider::XAI, k); } }
+    if let Some(m) = body.xai_model { if !m.is_empty() { settings.set_model(AIProvider::XAI, m); } }
     if let Some(v) = body.auto_switch_to_local      { settings.auto_switch_to_local = v; }
     if let Some(v) = body.notify_on_local_available { settings.notify_on_local_available = v; }
     settings.save();
@@ -164,12 +170,14 @@ async fn query_ai(
         content: SYSTEM_PROMPT.to_string(),
     });
 
-    let key = {
+    let (key, model) = {
         let settings = s.settings.read().await;
-        settings.get_key(&body.provider).map(String::from)
+        let key = settings.get_key(&body.provider).map(String::from);
+        let model = settings.get_model(&body.provider);
+        (key, model)
     };
 
-    match api_client::query(body.provider, body.messages, key).await {
+    match api_client::query(body.provider, body.messages, key, model).await {
         Ok(resp) => Json(serde_json::json!({
             "content": resp.content,
             "model": resp.model,

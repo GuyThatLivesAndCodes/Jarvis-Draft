@@ -643,18 +643,38 @@
     </div>
 
     <div class="settings-section">
-      <div class="settings-section-label">API KEYS</div>
+      <div class="settings-section-label">API KEYS & MODELS</div>
       <div class="settings-row">
         <span class="settings-key-label">ANTHROPIC</span>
         <input class="settings-input" id="keyAnthropic" type="password" placeholder="sk-ant-..." />
+      </div>
+      <div class="settings-row" style="margin-top: -12px;">
+        <span class="settings-key-label" style="font-size: 0.85rem; color: rgba(100,150,200,0.7);">MODEL</span>
+        <input class="settings-input" id="modelAnthropic" type="text" placeholder="claude-3-5-sonnet-20241022" />
       </div>
       <div class="settings-row">
         <span class="settings-key-label">OPENAI</span>
         <input class="settings-input" id="keyOpenAI" type="password" placeholder="sk-..." />
       </div>
+      <div class="settings-row" style="margin-top: -12px;">
+        <span class="settings-key-label" style="font-size: 0.85rem; color: rgba(100,150,200,0.7);">MODEL</span>
+        <input class="settings-input" id="modelOpenAI" type="text" placeholder="gpt-4o-mini" />
+      </div>
       <div class="settings-row">
         <span class="settings-key-label">XAI / GROK</span>
         <input class="settings-input" id="keyXAI" type="password" placeholder="xai-..." />
+      </div>
+      <div class="settings-row" style="margin-top: -12px;">
+        <span class="settings-key-label" style="font-size: 0.85rem; color: rgba(100,150,200,0.7);">GROK MODEL</span>
+        <select class="settings-input" id="modelXAI" style="font-family: 'Orbitron', monospace; text-transform: none;">
+          <option value="">Use default (grok-4.3)</option>
+          <option value="grok-4.3">grok-4.3</option>
+          <option value="grok-4.20-0309-reasoning">grok-4.20 Reasoning</option>
+          <option value="grok-4.20-0309-non-reasoning">grok-4.20 Non-Reasoning</option>
+          <option value="grok-4-1-fast-reasoning">grok-4.1 Fast Reasoning</option>
+          <option value="grok-4-1-fast-non-reasoning">grok-4.1 Fast Non-Reasoning</option>
+          <option value="grok-4.20-multi-agent-0309">grok-4.20 Multi-Agent</option>
+        </select>
       </div>
     </div>
 
@@ -891,8 +911,11 @@ function applySettingsToUI() {
     const find = p => settings.credentials.find(c => c.provider === p);
     const ant = find('anthropic'), oai = find('openai'), xai = find('xai');
     if (ant?.api_key) document.getElementById('keyAnthropic').value = ant.api_key;
+    if (ant?.model) document.getElementById('modelAnthropic').value = ant.model;
     if (oai?.api_key) document.getElementById('keyOpenAI').value = oai.api_key;
+    if (oai?.model) document.getElementById('modelOpenAI').value = oai.model;
     if (xai?.api_key) document.getElementById('keyXAI').value = xai.api_key;
+    if (xai?.model) document.getElementById('modelXAI').value = xai.model;
   }
   const auto = document.getElementById('toggleAutoSwitch');
   const ntfy = document.getElementById('toggleNotify');
@@ -1109,8 +1132,11 @@ document.getElementById('statusBtn').addEventListener('click', () => {
 document.getElementById('settingsSave').addEventListener('click', async () => {
   const body = {
     anthropic_key: document.getElementById('keyAnthropic').value,
+    anthropic_model: document.getElementById('modelAnthropic').value || null,
     openai_key: document.getElementById('keyOpenAI').value,
+    openai_model: document.getElementById('modelOpenAI').value || null,
     xai_key: document.getElementById('keyXAI').value,
+    xai_model: document.getElementById('modelXAI').value || null,
     auto_switch_to_local: document.getElementById('toggleAutoSwitch').classList.contains('on'),
     notify_on_local_available: document.getElementById('toggleNotify').classList.contains('on'),
   };

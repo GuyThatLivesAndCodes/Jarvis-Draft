@@ -6,6 +6,7 @@ use std::{fs, path::PathBuf};
 pub struct APICredential {
     pub provider: AIProvider,
     pub api_key:  String,
+    pub model:    Option<String>,
     pub enabled:  bool,
 }
 
@@ -70,7 +71,20 @@ impl Settings {
             c.api_key = key;
             c.enabled = true;
         } else {
-            self.credentials.push(APICredential { provider, api_key: key, enabled: true });
+            self.credentials.push(APICredential { provider, api_key: key, model: None, enabled: true });
+        }
+    }
+
+    pub fn get_model(&self, provider: &AIProvider) -> Option<String> {
+        self.credentials
+            .iter()
+            .find(|c| &c.provider == provider)
+            .and_then(|c| c.model.clone())
+    }
+
+    pub fn set_model(&mut self, provider: AIProvider, model: String) {
+        if let Some(c) = self.credentials.iter_mut().find(|c| c.provider == provider) {
+            c.model = Some(model);
         }
     }
 }
