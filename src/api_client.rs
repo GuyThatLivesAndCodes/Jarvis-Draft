@@ -1,4 +1,5 @@
 use crate::models::{AIProvider, ChatMessage, AIResponse};
+use crate::tools;
 
 pub async fn query(
     provider: AIProvider,
@@ -22,39 +23,96 @@ pub async fn query(
     }
 }
 
-async fn anthropic(msgs: Vec<ChatMessage>, system: Option<String>, key: Option<String>, model_override: Option<String>) -> Result<AIResponse, String> {
+async fn anthropic(mut msgs: Vec<ChatMessage>, system: Option<String>, key: Option<String>, model_override: Option<String>) -> Result<AIResponse, String> {
     let key   = key.ok_or("Missing Anthropic API key")?;
     let model = model_override.unwrap_or_else(|| "claude-3-5-sonnet-20241022".to_string());
+    let tools_list = tools::get_tools();
 
-    let mut body = serde_json::json!({
-        "model": model,
-        "max_tokens": 1024,
-        "messages": msgs.iter().map(|m| serde_json::json!({"role":m.role,"content":m.content})).collect::<Vec<_>>()
-    });
+    loop {
+        let mut body = serde_json::json!({
+            "model": model,
+            "max_tokens": 2048,
+            "messages": msgs.iter().map(|m| serde_json::json!({"role":m.role,"content":m.content})).collect::<Vec<_>>(),
+            "tools": tools_list.iter().map(|t| serde_json::json!({
+                "name": t.name,
+                "description": t.description,
+                "input_schema": t.input_schema
+            })).collect::<Vec<_>>()
+        });
 
-    if let Some(sys) = system {
-        body["system"] = serde_json::json!(sys);
+        if let Some(ref sys) = system {
+            body["system"] = serde_json::json!(sys);
+        }
+
+        let resp: serde_json::Value = reqwest::Client::new()
+            .post("https://api.anthropic.com/v1/messages")
+            .header("x-api-key", &key)
+            .header("anthropic-version", "2023-06-01")
+            .json(&body).send().await.map_err(|e| e.to_string())?
+            .json().await.map_err(|e| e.to_string())?;
+
+        if let Some(err) = resp.get("error") {
+            return Err(format!("API Error: {}", err.to_string()));
+        }
+
+        let content_blocks = resp["content"].as_array().ok_or("Invalid response format")?;
+        let mut has_tool_use = false;
+        let mut final_text = String::new();
+        let mut tool_results = Vec::new();
+
+        for block in content_blocks {
+            if let Some(text) = block.get("text").and_then(|t| t.as_str()) {
+                final_text = text.to_string();
+            }
+
+            if block.get("type").and_then(|t| t.as_str()) == Some("tool_use") {
+                has_tool_use = true;
+                let tool_id = block.get("id").and_then(|id| id.as_str()).unwrap_or("");
+                let tool_name = block.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                let tool_input = block.get("input").cloned().unwrap_or(serde_json::json!({}));
+
+                match tools::execute_tool(tool_name, tool_input).await {
+                    Ok(result) => {
+                        tool_results.push(serde_json::json!({
+                            "type": "tool_result",
+                            "tool_use_id": tool_id,
+                            "content": result
+                        }));
+                    }
+                    Err(e) => {
+                        tool_results.push(serde_json::json!({
+                            "type": "tool_result",
+                            "tool_use_id": tool_id,
+                            "content": format!("Error: {}", e),
+                            "is_error": true
+                        }));
+                    }
+                }
+            }
+        }
+
+        if !has_tool_use {
+            return Ok(AIResponse { content: final_text, provider: AIProvider::Anthropic, model });
+        }
+
+        // Add assistant response with tool use to messages
+        let mut assistant_content = Vec::new();
+        for block in content_blocks {
+            assistant_content.push(block.clone());
+        }
+        msgs.push(ChatMessage {
+            role: "assistant".to_string(),
+            content: serde_json::to_string(&assistant_content).unwrap_or_default(),
+        });
+
+        // Add tool results
+        for result in tool_results {
+            msgs.push(ChatMessage {
+                role: "user".to_string(),
+                content: result.to_string(),
+            });
+        }
     }
-
-    let resp: serde_json::Value = reqwest::Client::new()
-        .post("https://api.anthropic.com/v1/messages")
-        .header("x-api-key", key)
-        .header("anthropic-version", "2023-06-01")
-        .json(&body).send().await.map_err(|e| e.to_string())?
-        .json().await.map_err(|e| e.to_string())?;
-
-    // Check for API error
-    if let Some(err) = resp.get("error") {
-        return Err(format!("API Error: {}", err.to_string()));
-    }
-
-    let content = resp["content"]
-        .get(0)
-        .and_then(|c| c.get("text"))
-        .and_then(|t| t.as_str())
-        .ok_or("Invalid response format from Anthropic")?
-        .to_string();
-    Ok(AIResponse { content, provider: AIProvider::Anthropic, model })
 }
 
 async fn openai(msgs: Vec<ChatMessage>, key: Option<String>, model_override: Option<String>) -> Result<AIResponse, String> {
